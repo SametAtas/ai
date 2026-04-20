@@ -11,7 +11,6 @@ export interface ChatSessionState {
   messages: Array<ChatMessage>
   isStreaming: boolean
   error: string | null
-  draftResponse: string
   sources: Array<SourceItem>
 }
 
@@ -19,7 +18,6 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   messages: [],
   isStreaming: false,
   error: null,
-  draftResponse: '',
   sources: [],
 }
 
@@ -180,21 +178,9 @@ export function applyEventToState(
 
   const eventParts = event.content.parts
 
-  // Logic from processEventIntoCache
-  let draftResponse = prev.draftResponse
   let messages = prev.messages
-  let sources = prev.sources
 
-  // 1. Writer draft updates
-  if (event.author === 'writer' && event.partial) {
-    const text = eventParts
-      .map((p) => p.text ?? '')
-      .filter(Boolean)
-      .join('')
-    draftResponse += text
-  }
-
-  // 2. User history replay deduplication
+  // User history replay deduplication
   if (event.content.role === 'user') {
     const exists = messages.some(
       (m) =>
@@ -215,7 +201,7 @@ export function applyEventToState(
     return { ...prev, messages }
   }
 
-  // 3. Agent parts (text & tool calls)
+  // Agent parts (text & tool calls)
   if (event.content.role === 'model') {
     const last = messages[messages.length - 1]
     if (
@@ -266,7 +252,8 @@ export function applyEventToState(
     }
   }
 
-  // 4. Grounding metadata (Sources)
+  // Grounding metadata (Sources)
+  let sources = prev.sources;
   if (event.groundingMetadata?.groundingChunks) {
     const newSources: Array<SourceItem> =
       event.groundingMetadata.groundingChunks
@@ -295,7 +282,7 @@ export function applyEventToState(
     }
   }
 
-  return { ...prev, messages, draftResponse, sources }
+  return { ...prev, messages, sources }
 }
 
 /**
