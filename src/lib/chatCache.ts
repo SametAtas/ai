@@ -236,20 +236,23 @@ export function applyEventToState(
       const updatedParts = [...(last.parts || [])]
 
       for (const part of eventParts) {
-        if (part.text) {
-          // Streaming text: append to last text part if it exists
-          const lastPart = updatedParts[updatedParts.length - 1]
-          if (lastPart?.text !== undefined) {
-            updatedParts[updatedParts.length - 1] = {
-              ...lastPart,
-              text: lastPart.text + part.text,
-            }
-          } else {
-            updatedParts.push({ ...part })
-          }
-        } else {
-          // Tool calls or final text parts: push as is
+        if (!part.text) {
+          // Tool calls: push as is
           updatedParts.push({ ...part })
+          continue
+        }
+
+        // If last part is not a text part, push the text part as a new part
+        const lastPart = updatedParts[updatedParts.length - 1]
+        if (lastPart?.text === undefined) {
+          updatedParts.push({ ...part })
+          continue
+        }
+
+        // Append the text part to the last text part
+        updatedParts[updatedParts.length - 1] = {
+          ...lastPart,
+          text: lastPart.text + part.text,
         }
       }
 
