@@ -177,7 +177,7 @@ export function applyEventToState(
 ): ChatSessionState {
   if (!event.content?.parts) return prev
 
-  console.info('applyEventToState', event);
+  // console.info('applyEventToState', event);
 
   const eventParts = event.content.parts
 
@@ -202,15 +202,41 @@ export function applyEventToState(
   // Agent parts (text & tool calls)
   if (event.content.role === 'model') {
     const last = messages[messages.length - 1]
-    if (
-      last.role === 'model' &&
+    const isLastStillStreaming = last.role === 'model' &&
       last.isStreaming &&
       (last.author || 'writer') === (event.author || 'writer')
-    ) {
+
+    if (!isLastStillStreaming) {
+      messages = [
+        ...messages,
+        {
+          id: genId(),
+          role: 'model',
+          author: event.author || 'writer',
+          parts: [...eventParts],
+          isStreaming: event.partial !== false,
+          timestamp: new Date(),
+        },
+      ]
+    } else if (!event.partial) {
+      // Last event still streaming but not this event, mark last event as not streaming.
+      // ADK marks the end of streaming by setting `partial: false` with a full message.
+      // However, we have appended the streaming content to the last message in previous iterations,
+      // thus we can just reset the isStreaming flag of the previous message and drop this event.
+
+      messages = [
+        ...messages.slice(0, -1),
+        {
+          ...last,
+          isStreaming: false,
+        },
+      ]
+    } else {
+      // Last event is still streaming and this event still streaming, append to it
       const updatedParts = [...(last.parts || [])]
 
       for (const part of eventParts) {
-        if (event.partial && part.text) {
+        if (part.text) {
           // Streaming text: append to last text part if it exists
           const lastPart = updatedParts[updatedParts.length - 1]
           if (lastPart?.text !== undefined) {
@@ -232,19 +258,7 @@ export function applyEventToState(
         {
           ...last,
           parts: updatedParts,
-          isStreaming: event.partial !== false,
-        },
-      ]
-    } else {
-      messages = [
-        ...messages,
-        {
-          id: genId(),
-          role: 'model',
-          author: event.author || 'writer',
-          parts: [...eventParts],
-          isStreaming: event.partial !== false,
-          timestamp: new Date(),
+          isStreaming: true,
         },
       ]
     }
