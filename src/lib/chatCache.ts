@@ -177,30 +177,26 @@ export function applyEventToState(
 ): ChatSessionState {
   if (!event.content?.parts) return prev
 
+  console.info('applyEventToState', event);
+
   const eventParts = event.content.parts
 
   let messages = prev.messages
 
   // User history replay deduplication
   if (event.content.role === 'user') {
-    const exists = messages.some(
-      (m) =>
-        m.role === 'user' &&
-        JSON.stringify(m.parts) === JSON.stringify(eventParts),
-    )
-    if (!exists) {
-      messages = [
-        ...messages,
+    return {
+      ...prev, messages: [
+        ...prev.messages,
         {
           id: genId(),
           role: 'user',
-          author: event.author,
+          author: event.author || 'user',
           parts: [...eventParts],
           timestamp: new Date(),
         },
       ]
     }
-    return { ...prev, messages }
   }
 
   // Agent parts (text & tool calls)
