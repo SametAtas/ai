@@ -181,8 +181,6 @@ export function applyEventToState(
 
   const eventParts = event.content.parts
 
-  let messages = prev.messages
-
   // User history replay deduplication
   if (event.content.role === 'user') {
     return {
@@ -199,12 +197,14 @@ export function applyEventToState(
     }
   }
 
+  let messages = prev.messages
+
   // Agent parts (text & tool calls)
   if (event.content.role === 'model') {
     const last = messages[messages.length - 1]
-    const isLastStillStreaming = last.role === 'model' &&
-      last.isStreaming &&
-      (last.author || 'writer') === (event.author || 'writer')
+    const isLastStillStreaming = last?.role === 'model' &&
+      last?.isStreaming &&
+      (last?.author || 'writer') === (event.author || 'writer')
 
     if (!isLastStillStreaming) {
       messages = [

@@ -57,12 +57,12 @@ export function AgentMessage({ message }: AgentMessageProps) {
                 </span>
                 <div className="tool-badge">
                   <span className="material-symbols-outlined text-[14px] text-gray-500">
-                    {tool.name?.toLowerCase().includes('search')
+                    {tool.name?.toLowerCase()?.includes('search')
                       ? 'search'
-                      : tool.name?.toLowerCase().includes('verify') ||
-                        tool.name?.toLowerCase().includes('check')
+                      : tool.name?.toLowerCase()?.includes('verify') ||
+                        tool.name?.toLowerCase()?.includes('check')
                         ? 'shield'
-                        : tool.name?.toLowerCase().includes('cofacts')
+                        : tool.name?.toLowerCase()?.includes('cofacts')
                           ? 'fact_check'
                           : 'build'}
                   </span>
