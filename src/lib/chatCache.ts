@@ -181,7 +181,7 @@ export function applyEventToState(
 
   const eventParts = event.content.parts
 
-  // User history replay deduplication
+  // event is user message, just append message
   if (event.content.role === 'user') {
     return {
       ...prev, messages: [
