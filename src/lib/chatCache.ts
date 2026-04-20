@@ -193,6 +193,7 @@ export function applyEventToState(
         {
           id: genId(),
           role: 'user',
+          author: event.author,
           parts: [...eventParts],
           timestamp: new Date(),
         },
