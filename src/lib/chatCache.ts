@@ -47,35 +47,20 @@ export async function startChatStream({
 }: StartStreamOptions) {
   const queryKey = ['chat', sessionId]
 
-  // Initialize state if it doesn't exist
-  if (!queryClient.getQueryData(queryKey)) {
-    queryClient.setQueryData(queryKey, INITIAL_CHAT_STATE)
-  }
-
   // Abort any existing stream for this session
   abortControllers.get(sessionId)?.abort()
   const controller = new AbortController()
   abortControllers.set(sessionId, controller)
 
-  // Set streaming state to true and add a placeholder agent message
-  const streamingMsgId = genId()
   queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => {
+    // Initialize state if it doesn't exist
     if (!prev) return INITIAL_CHAT_STATE
+
+    // Set existing session state's streaming flag and reset errors
     return {
       ...prev,
       isStreaming: true,
       error: null,
-      messages: [
-        ...prev.messages,
-        {
-          id: streamingMsgId,
-          role: 'model',
-          author: 'writer',
-          parts: [],
-          isStreaming: true,
-          timestamp: new Date(),
-        },
-      ],
     }
   })
 

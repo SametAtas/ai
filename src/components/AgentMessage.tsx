@@ -74,18 +74,6 @@ export function AgentMessage({ message }: AgentMessageProps) {
 
           return null
         })}
-
-        {/* Streaming indicator */}
-        {message.isStreaming && (
-          <p className="flex items-center gap-2 text-gray-500">
-            正在思考中
-            <span className="typing-indicator ml-1">
-              <span />
-              <span />
-              <span />
-            </span>
-          </p>
-        )}
       </div>
 
       {/* Feedback buttons (only show when not streaming) */}
@@ -96,8 +84,8 @@ export function AgentMessage({ message }: AgentMessageProps) {
               setFeedbackGiven(feedbackGiven === 'up' ? null : 'up')
             }
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 'up'
-                ? 'text-primary'
-                : 'text-gray-400 hover:text-gray-600'
+              ? 'text-primary'
+              : 'text-gray-400 hover:text-gray-600'
               }`}
           >
             <span className="material-symbols-outlined text-[18px]">
@@ -109,8 +97,8 @@ export function AgentMessage({ message }: AgentMessageProps) {
               setFeedbackGiven(feedbackGiven === 'down' ? null : 'down')
             }
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 'down'
-                ? 'text-destructive'
-                : 'text-gray-400 hover:text-gray-600'
+              ? 'text-destructive'
+              : 'text-gray-400 hover:text-gray-600'
               }`}
           >
             <span className="material-symbols-outlined text-[18px]">

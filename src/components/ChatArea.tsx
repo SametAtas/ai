@@ -56,6 +56,17 @@ export function ChatArea({
           return <AgentMessage key={msg.id} message={msg} />
         })}
 
+        {
+          isStreaming && <p className="flex items-center gap-2 text-gray-500">
+            正在思考中
+            <span className="typing-indicator ml-1">
+              <span />
+              <span />
+              <span />
+            </span>
+          </p>
+        }
+
         {/* Extra space at the bottom */}
         <div className="h-4" />
       </div>
