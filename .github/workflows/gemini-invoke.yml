@@ -53,7 +53,7 @@ jobs:
           REPOSITORY: '${{ github.repository }}'
           ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
         with:
-          gcp_location: 'us-east5'
+          gcp_location: 'global'
           gcp_project_id: '${{ secrets.GC_PROJECT_ID }}'
           gcp_service_account: '${{ secrets.GC_SERVICE_ACCOUNT }}'
           gcp_workload_identity_provider: '${{ secrets.GC_WORKLOAD_IDENTITY_PROVIDER }}'
