@@ -59,11 +59,9 @@ jobs:
           gcp_project_id: '${{ secrets.GC_PROJECT_ID }}'
           gcp_service_account: '${{ secrets.GC_SERVICE_ACCOUNT }}'
           gcp_workload_identity_provider: '${{ secrets.GC_WORKLOAD_IDENTITY_PROVIDER }}'
-          gemini_api_key: '${{ secrets.GEMINI_API_KEY }}'
           gemini_cli_version: '${{ vars.GEMINI_CLI_VERSION }}'
           gemini_debug: '${{ fromJSON(vars.GEMINI_DEBUG || vars.ACTIONS_STEP_DEBUG || false) }}'
           gemini_model: '${{ vars.GEMINI_MODEL }}'
-          google_api_key: '${{ secrets.GOOGLE_API_KEY }}'
           use_gemini_code_assist: '${{ vars.GOOGLE_GENAI_USE_GCA }}'
           use_vertex_ai: true
           upload_artifacts: '${{ vars.UPLOAD_ARTIFACTS }}'
