@@ -10,9 +10,9 @@ interface AgentMessageProps {
 
 const langfuse = import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
   ? new LangfuseWeb({
-      publicKey: import.meta.env.VITE_LANGFUSE_PUBLIC_KEY,
-      baseUrl: import.meta.env.VITE_LANGFUSE_BASE_URL,
-    })
+    publicKey: import.meta.env.VITE_LANGFUSE_PUBLIC_KEY,
+    baseUrl: import.meta.env.VITE_LANGFUSE_BASE_URL,
+  })
   : null
 
 export function AgentMessage({ message }: AgentMessageProps) {
@@ -101,28 +101,32 @@ export function AgentMessage({ message }: AgentMessageProps) {
       {/* Feedback buttons (only show when not streaming) */}
       {!message.isStreaming && fullText && (
         <div className="flex items-center gap-3 pt-2 mt-4 border-t border-gray-100 w-full">
-          <button
-            onClick={() => handleFeedback(1)}
-            className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 1
-              ? 'text-primary'
-              : 'text-gray-400 hover:text-gray-600'
-              }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              thumb_up
-            </span>
-          </button>
-          <button
-            onClick={() => handleFeedback(-1)}
-            className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === -1
-              ? 'text-destructive'
-              : 'text-gray-400 hover:text-gray-600'
-              }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              thumb_down
-            </span>
-          </button>
+          {message.langfuseTraceId !== undefined && (
+            <>
+              <button
+                onClick={() => handleFeedback(1)}
+                className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 1
+                  ? 'text-primary'
+                  : 'text-gray-400 hover:text-gray-600'
+                  }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  thumb_up
+                </span>
+              </button>
+              <button
+                onClick={() => handleFeedback(-1)}
+                className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === -1
+                  ? 'text-destructive'
+                  : 'text-gray-400 hover:text-gray-600'
+                  }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  thumb_down
+                </span>
+              </button>
+            </>
+          )}
           <button
             onClick={() => navigator.clipboard.writeText(fullText)}
             className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100 ml-auto"
