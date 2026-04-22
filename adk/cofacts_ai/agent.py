@@ -546,7 +546,7 @@ ai_writer = LlmAgent(
     ],
 )
 
-root_agent = App(
+app = App(
     name="cofacts_ai",
     root_agent=ai_writer,
     plugins=[LangfuseTracingPlugin()],
