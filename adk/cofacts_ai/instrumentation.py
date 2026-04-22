@@ -35,13 +35,13 @@ class LangfuseTracingPlugin(BasePlugin):
     def __init__(self):
         super().__init__(name="langfuse_tracing")
 
-    async def on_event_callback(
-        self, *, invocation_context: InvocationContext, event: Event
+    async def before_run_callback(
+        self, *, invocation_context: InvocationContext
     ):
         langfuse = get_client()
         trace_id = langfuse.get_current_trace_id()
         if trace_id:
-            if event.custom_metadata is None:
-                event.custom_metadata = {}
-            event.custom_metadata["langfuse_trace_id"] = trace_id
-        return event
+            if invocation_context.run_config.custom_metadata is None:
+                invocation_context.run_config.custom_metadata = {}
+            invocation_context.run_config.custom_metadata["langfuse_trace_id"] = trace_id
+        return None
