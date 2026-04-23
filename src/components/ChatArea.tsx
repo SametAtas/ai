@@ -51,7 +51,7 @@ export function ChatArea({
                 - Next message has different trace id or doesn't exist
               */
               msg.langfuseTraceId &&
-              !isStreaming &&
+              !msg.isStreaming &&
               (!nextMsg?.langfuseTraceId || msg.langfuseTraceId !== nextMsg.langfuseTraceId) &&
               <FeedbackButtons traceId={msg.langfuseTraceId} />
             }
