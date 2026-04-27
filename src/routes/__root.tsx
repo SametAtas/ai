@@ -8,8 +8,11 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import appCss from '../styles.css?url'
+import { AuthProvider } from '@/lib/auth'
+import { getCurrentUserServerFn } from '@/server/me.functions'
 
 export const Route = createRootRoute({
+  loader: async () => ({ initialUser: await getCurrentUserServerFn() }),
   head: () => ({
     meta: [
       {
@@ -67,6 +70,7 @@ const queryClient = new QueryClient({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const { initialUser } = Route.useLoaderData()
   return (
     <html lang="zh-TW">
       <head>
@@ -74,7 +78,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <QueryClientProvider client={queryClient}>
-          {children}
+          <AuthProvider initialUser={initialUser}>
+            {children}
+          </AuthProvider>
           <ReactQueryDevtools />
         </QueryClientProvider>
         <Scripts />

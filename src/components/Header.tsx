@@ -1,8 +1,26 @@
+import { useEffect, useRef, useState } from 'react'
+import { useAuth } from '@/lib/auth'
+
 interface HeaderProps {
   onToggleSidebar: () => void
 }
 
 export function Header({ onToggleSidebar }: HeaderProps) {
+  const { user, isLoading, login, logout } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function handleOutsideClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [menuOpen])
+
   return (
     <header className="h-14 md:h-16 bg-white border-b border-border-subtle flex items-center justify-between px-4 shrink-0 z-30 relative shadow-sm">
       <div className="flex items-center gap-4 md:gap-6">
@@ -59,11 +77,41 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         <button className="p-2 hover:bg-gray-100 rounded-full text-text-muted relative hidden md:block">
           <span className="material-symbols-outlined">notifications</span>
         </button>
-        <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 cursor-pointer flex items-center justify-center">
-          <span className="material-symbols-outlined text-gray-500">
-            person
-          </span>
-        </div>
+        {isLoading ? (
+          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex items-center justify-center">
+            <span className="material-symbols-outlined text-gray-500">person</span>
+          </div>
+        ) : user ? (
+          <div ref={menuRef} className="relative">
+            <img
+              src={user.avatarUrl}
+              alt={user.name}
+              title={user.name}
+              onClick={() => setMenuOpen(o => !o)}
+              className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden border border-gray-300 cursor-pointer object-cover"
+            />
+            {menuOpen && (
+              <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
+                <div className="px-4 py-2 text-sm text-gray-700 font-medium truncate border-b border-gray-100">
+                  {user.name}
+                </div>
+                <button
+                  onClick={() => { setMenuOpen(false); logout() }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  登出
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            onClick={() => login()}
+            className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 cursor-pointer flex items-center justify-center"
+          >
+            <span className="material-symbols-outlined text-gray-500">person</span>
+          </div>
+        )}
       </div>
     </header>
   )
