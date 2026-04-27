@@ -18,7 +18,9 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
   const [feedbackGiven, setFeedbackGiven] = useState<1 | -1 | null>(null)
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
 
-  const handleFeedback = (value: 1 | -1) => {
+  const handleFeedback = (e: React.MouseEvent, value: 1 | -1) => {
+    // Stop event from propagating to the trigger so the trigger doesn't automatically open it when resetting
+    e.stopPropagation()
     const next = feedbackGiven === value ? null : value
     setFeedbackGiven(next)
 
@@ -66,10 +68,15 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
 
   return (
     <div className="flex items-center gap-3 pt-2 mt-4 border-t border-gray-100 w-full">
-      <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+      <Popover
+        open={isPopoverOpen}
+        onOpenChange={(open) => {
+          if (!open) setIsPopoverOpen(false)
+        }}
+      >
         <PopoverTrigger render={<div className="flex gap-3" />}>
           <button
-            onClick={() => handleFeedback(1)}
+            onClick={(e) => handleFeedback(e, 1)}
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               feedbackGiven === 1
                 ? 'text-primary'
@@ -81,7 +88,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
             </span>
           </button>
           <button
-            onClick={() => handleFeedback(-1)}
+            onClick={(e) => handleFeedback(e, -1)}
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               feedbackGiven === -1
                 ? 'text-destructive'
