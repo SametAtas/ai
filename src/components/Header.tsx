@@ -83,13 +83,18 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           </div>
         ) : user ? (
           <div ref={menuRef} className="relative">
-            <img
-              src={user.avatarUrl}
-              alt={user.name}
-              title={user.name}
+            <button
+              type="button"
               onClick={() => setMenuOpen(o => !o)}
-              className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden border border-gray-300 cursor-pointer object-cover"
-            />
+              className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden border border-gray-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <img
+                src={user.avatarUrl}
+                alt={user.name}
+                title={user.name}
+                className="w-full h-full object-cover"
+              />
+            </button>
             {menuOpen && (
               <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
                 <div className="px-4 py-2 text-sm text-gray-700 font-medium truncate border-b border-gray-100">
@@ -105,12 +110,13 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             )}
           </div>
         ) : (
-          <div
+          <button
+            type="button"
             onClick={() => login()}
-            className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 cursor-pointer flex items-center justify-center"
+            className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 cursor-pointer flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span className="material-symbols-outlined text-gray-500">person</span>
-          </div>
+          </button>
         )}
       </div>
     </header>
