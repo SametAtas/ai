@@ -1,8 +1,8 @@
 // BFF login initiator.
 //
-// The browser hits this route to start the Twitter OAuth flow. The server
-// constructs the upstream rumors-api URL (origin known only to the server
-// under the BFF model) and 302-redirects.
+// The browser hits this route to start the OAuth flow with a chosen
+// provider. The server constructs the upstream rumors-api URL (origin
+// known only to the server under the BFF model) and 302-redirects.
 //
 // Two pieces of state are carried through OAuth:
 //
@@ -20,9 +20,9 @@
 //      the path server-side before redirecting the browser, so a tampered
 //      `state` cannot achieve an open redirect either.
 //
-// `provider` is currently fixed to `twitter` to mirror the existing flow;
-// the path segment is a whitelist constant rather than query input to make
-// path-injection structurally impossible.
+// `provider` is taken from the query string but matched against a strict
+// whitelist before being interpolated into the upstream path, so path
+// injection is structurally impossible.
 
 import { randomBytes } from 'node:crypto';
 
@@ -35,7 +35,12 @@ import {
   buildOAuthStateCookieAttrs,
 } from '@/server/session';
 
-const PROVIDER_PATH = '/login/twitter';
+const ALLOWED_PROVIDERS = ['github', 'facebook', 'google'] as const;
+type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number];
+
+function isAllowedProvider(value: string): value is AllowedProvider {
+  return (ALLOWED_PROVIDERS as ReadonlyArray<string>).includes(value);
+}
 
 function sanitizeRedirectPath(redirectTo: string, origin: string): string {
   if (redirectTo.startsWith('//')) return '/';
@@ -62,14 +67,19 @@ export const Route = createFileRoute('/api/auth/login')({
     handlers: {
       GET: async ({ request }) => {
         const reqUrl = new URL(request.url);
-        const redirectTo = reqUrl.searchParams.get('redirect_to') ?? '/';
+        const providerParam = reqUrl.searchParams.get('provider') ?? '';
+        if (!isAllowedProvider(providerParam)) {
+          return new Response('Invalid provider', { status: 400 });
+        }
+        const provider: AllowedProvider = providerParam;
 
+        const redirectTo = reqUrl.searchParams.get('redirect_to') ?? '/';
         const safePath = sanitizeRedirectPath(redirectTo, reqUrl.origin);
         const nonce = randomBytes(32).toString('base64url');
         const state = encodeState(nonce, safePath);
         const callbackUrl = `${reqUrl.origin}/api/auth/callback`;
 
-        const upstream = new URL(`${API_BASE}${PROVIDER_PATH}`);
+        const upstream = new URL(`${API_BASE}/login/${provider}`);
         upstream.searchParams.set('redirect_to', callbackUrl);
         upstream.searchParams.set('state', state);
 

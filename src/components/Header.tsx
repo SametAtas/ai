@@ -109,9 +109,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           <button
             type="button"
             onClick={() => login()}
-            className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 cursor-pointer flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary"
+            className="px-4 py-1.5 rounded-full bg-primary text-white text-sm font-medium hover:bg-primary/90 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
           >
-            <span className="material-symbols-outlined text-gray-500">person</span>
+            登入 / 註冊
           </button>
         )}
       </div>

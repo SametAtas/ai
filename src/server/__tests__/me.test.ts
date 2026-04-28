@@ -94,7 +94,7 @@ describe('fetchMeWithToken', () => {
       'x-app-id': 'RUMORS_SITE',
     });
     expect(init.body).toBe(
-      JSON.stringify({ query: '{ GetUser { id name avatarUrl } }' }),
+      JSON.stringify({ query: '{ GetUser { id name avatarUrl avatarType avatarData } }' }),
     );
   });
 });

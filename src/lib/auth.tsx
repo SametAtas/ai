@@ -9,6 +9,7 @@
 
 import { createContext, useContext, useState } from 'react'
 import { getCurrentUserServerFn } from '@/server/me.functions'
+import { LoginModal } from '@/components/LoginModal'
 
 export type AvatarType = 'OpenPeeps' | 'Gravatar' | 'Facebook' | 'Github'
 
@@ -28,10 +29,6 @@ interface AuthState {
   refreshUser: () => Promise<void>
 }
 
-export function buildLoginPath(redirectTo: string = '/'): string {
-  return `/api/auth/login?redirect_to=${encodeURIComponent(redirectTo)}`
-}
-
 const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({
@@ -43,9 +40,14 @@ export function AuthProvider({
 }) {
   const [user, setUser] = useState<CofactsUser | null>(initialUser ?? null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoginModalOpen, setLoginModalOpen] = useState(false)
+  const [pendingRedirect, setPendingRedirect] = useState<string | undefined>(
+    undefined,
+  )
 
-  function login(redirectTo: string = '/') {
-    window.location.href = buildLoginPath(redirectTo)
+  function login(redirectTo?: string) {
+    setPendingRedirect(redirectTo)
+    setLoginModalOpen(true)
   }
 
   async function logout() {
@@ -79,6 +81,11 @@ export function AuthProvider({
       value={{ user, isLoading, login, logout, refreshUser }}
     >
       {children}
+      <LoginModal
+        open={isLoginModalOpen}
+        onOpenChange={setLoginModalOpen}
+        redirectPath={pendingRedirect}
+      />
     </AuthContext.Provider>
   )
 }
