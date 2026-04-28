@@ -52,8 +52,7 @@ export const Route = createFileRoute('/api/graphql')({
           );
         }
 
-        const responseBody = await upstream.text();
-        return new Response(responseBody, {
+        return new Response(upstream.body, {
           status: upstream.status,
           headers: { 'Content-Type': 'application/json' },
         });
