@@ -46,11 +46,7 @@ export function ChatInput({
               !e.nativeEvent.isComposing
             ) {
               e.preventDefault()
-              if (isStreaming) {
-                onStop?.()
-              } else {
-                handleSubmit()
-              }
+              handleSubmit()
             }
           }}
           disabled={disabled || isStreaming}
