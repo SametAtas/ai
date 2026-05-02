@@ -43,6 +43,8 @@ function LandingPage() {
         return
       }
 
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+
       // 2. Instantly seed the cache and start the background stream fetch
       sendChatMessage(queryClient, sessionId, text)
 
