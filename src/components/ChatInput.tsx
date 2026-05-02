@@ -3,9 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 interface ChatInputProps {
   onSend: (text: string) => void
   disabled?: boolean
+  placeholder?: string
 }
 
-export function ChatInput({ onSend, disabled }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled,
+  placeholder = '詢問後續問題或要求修改...',
+}: ChatInputProps) {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -31,14 +36,18 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (
+              e.key === 'Enter' &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing
+            ) {
               e.preventDefault()
               handleSubmit()
             }
           }}
           disabled={disabled}
           className="w-full bg-transparent border-none focus:ring-0 p-3 pr-12 min-h-[50px] max-h-32 resize-none text-sm rounded-xl"
-          placeholder="詢問後續問題或要求修改..."
+          placeholder={placeholder}
         />
         <button
           onClick={handleSubmit}
