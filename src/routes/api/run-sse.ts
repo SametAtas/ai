@@ -6,6 +6,14 @@ import type { components } from '@/lib/adk-types'
 type RunRequest = components['schemas']['RunAgentRequest']
 type ChatInput = Omit<RunRequest, 'appName' | 'userId' | 'streaming'>
 
+// Thin proxy for ADK's /run_sse endpoint.
+//
+// We cannot use a createServerFn() streaming server function here because
+// TanStack Start's serverFnFetcher (the RPC client implementation) swallows
+// AbortError in its internal IIFE, so AbortController.abort() on the client
+// never unblocks the for-await loop.
+// A plain API route lets the client use fetch() directly, where reader.read()
+// throws AbortError immediately with no intermediate layer in between.
 export const Route = createFileRoute('/api/run-sse')({
   server: {
     handlers: {
