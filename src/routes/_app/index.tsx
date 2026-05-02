@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { sendChatMessage } from '@/lib/chatCache'
-import { SESSION_TITLE_KEY, createSession } from '@/lib/sessions.functions'
+import { createSession } from '@/lib/sessions.functions'
 import { ChatInput } from '@/components/ChatInput'
 
 export const Route = createFileRoute('/_app/')({
@@ -32,9 +32,7 @@ function LandingPage() {
         await createSession({
           data: {
             sessionId,
-            initialState: {
-              [SESSION_TITLE_KEY]: title,
-            },
+            name: title,
           },
         })
       } catch (err) {

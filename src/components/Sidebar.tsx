@@ -1,9 +1,9 @@
 import { Link, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { AdkSession } from '@/lib/adk'
-import { getSessionTitle, useSessions } from '@/hooks/useSessions'
-import { SESSION_TITLE_KEY, updateSession } from '@/lib/sessions.functions'
+import type { SessionListItem } from '@/lib/sessions.functions'
+import { useSessions } from '@/hooks/useSessions'
+import { updateSession } from '@/lib/sessions.functions'
 
 interface SidebarProps {
   isOpen: boolean
@@ -11,7 +11,7 @@ interface SidebarProps {
 }
 
 interface SessionItemProps {
-  session: AdkSession
+  session: SessionListItem
   isActive: boolean
   onClose: () => void
 }
@@ -21,7 +21,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
 
-  const title = getSessionTitle(session)
+  const title = session.name
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -45,7 +45,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
       await updateSession({
         data: {
           sessionId: session.id,
-          stateDelta: { [SESSION_TITLE_KEY]: editTitle.trim() },
+          name: editTitle.trim(),
         },
       })
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })

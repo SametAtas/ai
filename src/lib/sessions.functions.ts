@@ -7,7 +7,13 @@ import type { components } from './adk-types'
 
 type RunRequest = components['schemas']['RunAgentRequest']
 
-export const SESSION_TITLE_KEY = 'title'
+const SESSION_TITLE_KEY = 'title'
+
+export interface SessionListItem {
+  id: string
+  name: string
+  lastUpdateTime: number
+}
 
 export const listSessions = createServerFn({ method: 'GET' }).handler(
   async () => {
@@ -20,7 +26,18 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
       },
     )
     if (error) handleAdkError(error)
-    return data
+    return (data ?? []).map((session): SessionListItem => {
+      const stateTitle = session.state?.[SESSION_TITLE_KEY]
+      const name =
+        typeof stateTitle === 'string' && stateTitle
+          ? stateTitle
+          : (session.events
+              ?.find(
+                (e) => e.content?.role === 'user' && e.content.parts?.[0]?.text,
+              )
+              ?.content?.parts?.[0]?.text?.slice(0, 40) ?? session.id)
+      return { id: session.id, name, lastUpdateTime: session.lastUpdateTime }
+    })
   },
 )
 
@@ -45,12 +62,12 @@ export const getSession = createServerFn({ method: 'GET' })
 
 interface CreateSessionInput {
   sessionId: string
-  initialState?: Record<string, any>
+  name?: string
 }
 
 export const createSession = createServerFn({ method: 'POST' })
   .inputValidator((input: CreateSessionInput) => input)
-  .handler(async ({ data: { sessionId, initialState } }) => {
+  .handler(async ({ data: { sessionId, name } }) => {
     const { response } = await adkClient.POST(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -63,7 +80,7 @@ export const createSession = createServerFn({ method: 'POST' })
         },
         // In the updated ADK schema, the body for /sessions/{session_id} POST
         // is expected to be the initial state (Record<string, any>).
-        body: initialState ?? {},
+        body: name ? { [SESSION_TITLE_KEY]: name } : {},
       },
     )
 
@@ -77,12 +94,12 @@ export const createSession = createServerFn({ method: 'POST' })
 
 interface UpdateSessionInput {
   sessionId: string
-  stateDelta: Record<string, any>
+  name: string
 }
 
 export const updateSession = createServerFn({ method: 'POST' })
   .inputValidator((input: UpdateSessionInput) => input)
-  .handler(async ({ data: { sessionId, stateDelta } }) => {
+  .handler(async ({ data: { sessionId, name } }) => {
     const { data, error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -94,7 +111,7 @@ export const updateSession = createServerFn({ method: 'POST' })
           },
         },
         body: {
-          stateDelta,
+          stateDelta: { [SESSION_TITLE_KEY]: name },
         },
       },
     )
