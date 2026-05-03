@@ -60,6 +60,7 @@ spec:
         args:
           - "--structured-logs"
           - "--port=5432"
+          - "--address=0.0.0.0"
           - "--auto-iam-authn"
           - "${GC_PROJECT_ID}:asia-east1:cofacts"
         resources:
