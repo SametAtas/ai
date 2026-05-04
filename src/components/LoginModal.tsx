@@ -1,3 +1,5 @@
+import { useServerFn } from '@tanstack/react-start'
+
 import {
   Dialog,
   DialogContent,
@@ -8,6 +10,7 @@ import {
   GithubIcon,
   GoogleIcon,
 } from '@/components/icons/ProviderIcons'
+import { login } from '@/server/auth.functions'
 
 const LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
 const EDITOR_FACEBOOK_GROUP =
@@ -51,16 +54,12 @@ interface LoginModalProps {
   redirectPath?: string
 }
 
-function buildLoginHref(
-  provider: ProviderConfig['id'],
-  redirectPath?: string,
-): string {
-  const target =
-    redirectPath ??
-    (typeof window !== 'undefined'
-      ? window.location.pathname + window.location.search + window.location.hash
-      : '/')
-  return `/api/auth/login?provider=${provider}&redirect_to=${encodeURIComponent(target)}`
+function resolveRedirectTarget(redirectPath?: string): string {
+  if (redirectPath) return redirectPath
+  if (typeof window === 'undefined') return '/'
+  return (
+    window.location.pathname + window.location.search + window.location.hash
+  )
 }
 
 export function LoginModal({
@@ -68,6 +67,7 @@ export function LoginModal({
   onOpenChange,
   redirectPath,
 }: LoginModalProps) {
+  const startLogin = useServerFn(login)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -76,14 +76,22 @@ export function LoginModal({
           {PROVIDERS.map((p) => {
             const Icon = p.icon
             return (
-              <a
+              <button
                 key={p.id}
-                href={buildLoginHref(p.id, redirectPath)}
+                type="button"
+                onClick={() =>
+                  startLogin({
+                    data: {
+                      provider: p.id,
+                      redirectTo: resolveRedirectTarget(redirectPath),
+                    },
+                  })
+                }
                 className={`relative flex items-center justify-center rounded-full px-12 py-3 text-sm font-medium uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${p.className}`}
               >
                 <Icon className="absolute left-4 h-7 w-7" />
                 <span>{p.label}</span>
-              </a>
+              </button>
             )
           })}
         </div>
