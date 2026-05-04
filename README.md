@@ -115,6 +115,24 @@ The following scripts can also be run using pnpm:
 - `format` - Formats code using Prettier
 - `check` - Runs both Prettier and ESLint (format and lint)
 - `install:agent` - Installs Python dependencies for the agent using `uv`
+- `codegen` - Regenerates `src/server/gql/` from the rumors-api GraphQL schema. Run after editing any `graphql(\`...\`)` document so the generated types stay in sync.
+
+### GraphQL Codegen
+
+Server-side GraphQL queries are typed via [`@graphql-codegen/client-preset`](https://the-guild.dev/graphql/codegen/docs/guides/react-vue#client-preset). Define queries inline with the `graphql` tag from `@/server/gql` and dispatch them through `cofactsExec` (see `src/lib/cofacts-exec.ts`):
+
+```ts
+import { graphql } from '@/server/gql'
+import { cofactsExec } from '@/lib/cofacts-exec'
+
+const GetSomethingDocument = graphql(`
+  query GetSomething { ... }
+`)
+
+const data = await cofactsExec(GetSomethingDocument)
+```
+
+The schema source is `https://api.cofacts.tw/graphql` (see `codegen.ts`). The generated `src/server/gql/` directory is committed.
 
 ## 📚 Documentation
 
