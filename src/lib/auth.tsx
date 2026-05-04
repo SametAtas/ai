@@ -6,22 +6,15 @@
 // data fetching goes through TanStack server functions (e.g.
 // `getCurrentUserServerFn`) which read the cookie and call rumors-api
 // server-side; user hydration is seeded by the SSR root loader; the OAuth
-// flow is initiated via `/api/auth/login` (server-side proxy that hides the
-// upstream URL).
+// flow is initiated via the `login` server function (which hides the upstream
+// rumors-api origin).
 
 import { createContext, useContext, useState } from 'react'
 import { getCurrentUserServerFn } from '@/server/me.functions'
+import type { CofactsUser } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
 
-export type AvatarType = 'OpenPeeps' | 'Gravatar' | 'Facebook' | 'Github'
-
-export interface CofactsUser {
-  id: string
-  name: string
-  avatarUrl: string | null
-  avatarType: AvatarType | null
-  avatarData: string | null
-}
+export type { CofactsUser }
 
 interface AuthState {
   user: CofactsUser | null

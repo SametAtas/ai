@@ -22,11 +22,12 @@ function FallbackImg({
   className?: string
 }) {
   const src = user.avatarUrl ?? NULL_USER_IMG
+  const displayName = user.name ?? ''
   return (
     <img
       src={src}
-      alt={user.name}
-      title={user.name}
+      alt={displayName}
+      title={displayName}
       width={size}
       height={size}
       className={`rounded-full object-cover shrink-0 ${className ?? ''}`}
@@ -44,7 +45,7 @@ export function UserAvatar({ user, size = 36, className }: UserAvatarProps) {
         <OpenPeepsAvatar
           avatarData={user.avatarData}
           size={size}
-          name={user.name}
+          name={user.name ?? ''}
           className={className}
         />
       </Suspense>

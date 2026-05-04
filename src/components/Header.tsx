@@ -82,7 +82,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               render={
                 <button
                   type="button"
-                  aria-label={user.name}
+                  aria-label={user.name ?? ''}
                   className="rounded-full overflow-hidden cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               }
