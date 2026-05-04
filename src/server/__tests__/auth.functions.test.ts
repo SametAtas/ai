@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { API_BASE } from '../api-base';
+import { getApiBase } from '../api-base';
 import {
   buildLoginUpstreamUrl,
   encodeState,
@@ -91,7 +91,7 @@ describe('buildLoginUpstreamUrl', () => {
     );
     const upstream = new URL(upstreamUrl);
     expect(`${upstream.origin}${upstream.pathname}`).toBe(
-      `${API_BASE}/login/github`,
+      `${getApiBase()}/login/github`,
     );
     expect(upstream.searchParams.get('redirect_to')).toBe(
       `${ORIGIN}/api/auth/callback`,

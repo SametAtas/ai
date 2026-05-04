@@ -19,7 +19,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { getCookie, setCookie } from '@tanstack/react-start/server';
 import { decodeJwt } from 'jose';
 
-import { API_BASE } from '@/server/api-base';
+import { getApiBase } from '@/server/api-base';
 import {
   OAUTH_STATE_COOKIE_NAME,
   SESSION_COOKIE_NAME,
@@ -91,7 +91,7 @@ export const Route = createFileRoute('/api/auth/callback')({
 
         let tokenRes: Response;
         try {
-          tokenRes = await fetch(`${API_BASE}/auth/token`, {
+          tokenRes = await fetch(`${getApiBase()}/auth/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code }),

@@ -26,7 +26,7 @@ import { redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setCookie } from '@tanstack/react-start/server';
 
-import { API_BASE } from './api-base';
+import { getApiBase } from './api-base';
 import { OAUTH_STATE_COOKIE_NAME, buildOAuthStateCookieAttrs } from './session';
 
 export const ALLOWED_PROVIDERS = ['github', 'facebook', 'google'] as const;
@@ -83,7 +83,7 @@ export function buildLoginUpstreamUrl(
   const state = encodeState(nonce, safePath);
   const callbackUrl = `${origin}/api/auth/callback`;
 
-  const upstream = new URL(`${API_BASE}/login/${provider}`);
+  const upstream = new URL(`${getApiBase()}/login/${provider}`);
   upstream.searchParams.set('redirect_to', callbackUrl);
   upstream.searchParams.set('state', state);
 

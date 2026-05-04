@@ -14,7 +14,7 @@ import type { TypedDocumentNode } from '@graphql-typed-document-node/core'
 import { getCookie } from '@tanstack/react-start/server'
 import { print } from 'graphql'
 
-import { API_BASE } from '@/server/api-base'
+import { getApiBase } from '@/server/api-base'
 import { SESSION_COOKIE_NAME } from '@/server/session'
 
 interface GraphQLResponse<TResult> {
@@ -28,7 +28,7 @@ export async function cofactsExec<TResult, TVariables>(
 ): Promise<TResult> {
   const token = getCookie(SESSION_COOKIE_NAME)
 
-  const res = await fetch(`${API_BASE}/graphql`, {
+  const res = await fetch(`${getApiBase()}/graphql`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

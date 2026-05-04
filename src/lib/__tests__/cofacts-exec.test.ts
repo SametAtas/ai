@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { API_BASE } from '@/server/api-base'
+import { getApiBase } from '@/server/api-base'
 import { cofactsExec } from '../cofacts-exec'
 import { graphql } from '@/server/gql'
 
@@ -91,7 +91,7 @@ describe('cofactsExec', () => {
 
     expect(fn).toHaveBeenCalledTimes(1)
     const [url, init] = fn.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe(`${API_BASE}/graphql`)
+    expect(url).toBe(`${getApiBase()}/graphql`)
     expect(init.method).toBe('POST')
     expect(init.headers).toMatchObject({
       'Content-Type': 'application/json',

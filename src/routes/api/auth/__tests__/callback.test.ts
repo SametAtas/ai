@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { getCookie, setCookie } from '@tanstack/react-start/server';
 
 import { Route } from '../callback';
-import { API_BASE } from '@/server/api-base';
+import { getApiBase } from '@/server/api-base';
 import {
   OAUTH_STATE_COOKIE_NAME,
   SESSION_COOKIE_NAME,
@@ -96,7 +96,7 @@ describe('GET /api/auth/callback', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [calledUrl, calledInit] = fetchMock.mock.calls[0];
-    expect(calledUrl).toBe(`${API_BASE}/auth/token`);
+    expect(calledUrl).toBe(`${getApiBase()}/auth/token`);
     expect(calledInit?.method).toBe('POST');
     expect(JSON.parse(calledInit?.body as string)).toEqual({ code: 'abc' });
 
