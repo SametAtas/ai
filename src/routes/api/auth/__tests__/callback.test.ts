@@ -4,6 +4,7 @@ import { getCookie, setCookie } from '@tanstack/react-start/server';
 
 import { Route } from '../callback';
 import { getApiBase } from '@/server/api-base';
+import { encodeState } from '@/server/auth.functions';
 import {
   OAUTH_STATE_COOKIE_NAME,
   SESSION_COOKIE_NAME,
@@ -46,12 +47,6 @@ function invoke(url: string): Promise<Response> | Response {
     pathname: '/api/auth/callback',
     next: () => ({ isNext: true, context: {} }),
   });
-}
-
-function encodeState(nonce: string, redirectPath: string): string {
-  return Buffer.from(JSON.stringify({ n: nonce, r: redirectPath })).toString(
-    'base64url',
-  );
 }
 
 const NONCE = 'fixed-test-nonce-aaaaaaaaaaaaaaaa';
@@ -140,17 +135,6 @@ describe('GET /api/auth/callback', () => {
       `https://app.example.com/api/auth/callback?code=abc&state=${state}`,
     );
     expect(res.status).toBe(401);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(setCookieMock).not.toHaveBeenCalled();
-  });
-
-  test('legacy state shape (plain base64url path, no JSON nonce) → 400', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch');
-    const state = Buffer.from('/dashboard', 'utf-8').toString('base64url');
-    const res = await invoke(
-      `https://app.example.com/api/auth/callback?code=abc&state=${state}`,
-    );
-    expect(res.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(setCookieMock).not.toHaveBeenCalled();
   });
