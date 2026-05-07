@@ -11,6 +11,8 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useServerFn } from '@tanstack/react-start'
+import { logout as logoutServerFn } from '@/server/auth.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 import type { CofactsUser } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
@@ -36,6 +38,7 @@ export function AuthProvider({
   serverLoadedUser?: CofactsUser | null
 }) {
   const queryClient = useQueryClient()
+  const callLogout = useServerFn(logoutServerFn)
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
 
   const { data: user, isFetching } = useQuery<CofactsUser | null>({
@@ -51,15 +54,12 @@ export function AuthProvider({
 
   const logout = useCallback(async () => {
     try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'same-origin',
-      })
+      await callLogout()
     } catch {
       // best-effort: clear local state even if the network call fails
     }
     queryClient.setQueryData(ME_QUERY_KEY, null)
-  }, [queryClient])
+  }, [callLogout, queryClient])
 
   const value = useMemo<AuthState>(
     () => ({ user: user ?? null, isLoading: isFetching, login, logout }),

@@ -24,10 +24,15 @@
 
 import { redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setCookie } from '@tanstack/react-start/server';
+import { deleteCookie, getRequest, setCookie } from '@tanstack/react-start/server';
 
 import { getApiBase } from './api-base';
-import { OAUTH_STATE_COOKIE_NAME, buildOAuthStateCookieAttrs } from './session';
+import {
+  OAUTH_STATE_COOKIE_NAME,
+  SESSION_COOKIE_NAME,
+  buildClearSessionCookieAttrs,
+  buildOAuthStateCookieAttrs,
+} from './session';
 
 export const ALLOWED_PROVIDERS = ['github', 'facebook', 'google'] as const;
 export type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number];
@@ -123,3 +128,11 @@ export const login = createServerFn({ method: 'POST' })
 
     throw redirect({ href: upstreamUrl });
   });
+
+// BFF logout. Clears the cofacts_session HttpOnly cookie by issuing
+// Set-Cookie with Max-Age=0 and the same attributes used at set time, so
+// browsers reliably remove it. Returns null so the client can resolve.
+export const logout = createServerFn({ method: 'POST' }).handler(async () => {
+  deleteCookie(SESSION_COOKIE_NAME, buildClearSessionCookieAttrs());
+  return null;
+});
