@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { SessionListItem } from '@/lib/chatSessions.functions'
 import { useSessions } from '@/hooks/useSessions'
 import { updateSession } from '@/lib/chatSessions.functions'
-import { getLastOpenedTime } from '@/lib/sessionOpenedTime'
 
 interface SidebarProps {
   isOpen: boolean
@@ -23,13 +22,14 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const [editTitle, setEditTitle] = useState('')
 
   const title = session.name
+  const lastActivityTime = session.lastEventTime ?? session.lastUpdateTime
   const hasNew =
     !isActive &&
-    session.lastUpdateTime > 0 &&
-    session.lastUpdateTime > getLastOpenedTime(session.id)
+    lastActivityTime > 0 &&
+    lastActivityTime > (session.lastOpenedAt ?? 0)
 
-  const lastActiveLabel = session.lastUpdateTime
-    ? new Date(session.lastUpdateTime * 1000).toLocaleDateString('zh-TW', {
+  const lastActiveLabel = lastActivityTime
+    ? new Date(lastActivityTime * 1000).toLocaleDateString('zh-TW', {
         month: 'short',
         day: 'numeric',
       })
@@ -141,7 +141,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { data: rawSessions, isLoading } = useSessions()
   const sessions = rawSessions
     ?.slice()
-    .sort((a, b) => b.lastUpdateTime - a.lastUpdateTime)
+    .sort(
+      (a, b) =>
+        (b.lastEventTime ?? b.lastUpdateTime) -
+        (a.lastEventTime ?? a.lastUpdateTime),
+    )
 
   return (
     <>

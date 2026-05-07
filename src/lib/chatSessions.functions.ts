@@ -4,10 +4,20 @@ import { handleAdkError, handleAdkResponseError } from './adk-errors'
 
 const SESSION_TITLE_KEY = 'title'
 
+// lastEventTime: set by Python after_agent_callback when an agent turn completes.
+// We avoid using ADK's built-in lastUpdateTime because any PATCH to session state
+// (including writing lastOpenedAt) bumps it, causing sidebar sort to jump on session open.
+const SESSION_LAST_EVENT_TIME_KEY = 'lastEventTime'
+
+// lastOpenedAt: set by the client when the user opens a session, for cross-device unread tracking.
+const SESSION_LAST_OPENED_KEY = 'lastOpenedAt'
+
 export interface SessionListItem {
   id: string
   name: string
   lastUpdateTime: number
+  lastEventTime?: number
+  lastOpenedAt?: number
 }
 
 export const listSessions = createServerFn({ method: 'GET' }).handler(
@@ -31,7 +41,15 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
                 (e) => e.content?.role === 'user' && e.content.parts?.[0]?.text,
               )
               ?.content?.parts?.[0]?.text?.slice(0, 40) ?? session.id)
-      return { id: session.id, name, lastUpdateTime: session.lastUpdateTime }
+      const lastEventTime = session.state?.[SESSION_LAST_EVENT_TIME_KEY]
+      const lastOpenedAt = session.state?.[SESSION_LAST_OPENED_KEY]
+      return {
+        id: session.id,
+        name,
+        lastUpdateTime: session.lastUpdateTime,
+        lastEventTime: typeof lastEventTime === 'number' ? lastEventTime : undefined,
+        lastOpenedAt: typeof lastOpenedAt === 'number' ? lastOpenedAt : undefined,
+      }
     })
   },
 )
@@ -112,4 +130,27 @@ export const updateSession = createServerFn({ method: 'POST' })
     )
     if (error) handleAdkError(error)
     return data
+  })
+
+export const markSessionOpened = createServerFn({ method: 'POST' })
+  .inputValidator((sessionId: string) => sessionId)
+  .handler(async ({ data: sessionId }) => {
+    const { error } = await adkClient.PATCH(
+      '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
+      {
+        params: {
+          path: {
+            app_name: ADK_APP_NAME,
+            user_id: ADK_USER_ID,
+            session_id: sessionId,
+          },
+        },
+        // Store as seconds (Date.now()/1000) to match Python's time.time() for comparison.
+        body: {
+          stateDelta: { [SESSION_LAST_OPENED_KEY]: Date.now() / 1000 },
+        },
+      },
+    )
+    if (error) handleAdkError(error)
+    return { ok: true }
   })
