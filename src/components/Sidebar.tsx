@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { SessionListItem } from '@/lib/chatSessions.functions'
 import { useSessions } from '@/hooks/useSessions'
-import { updateSession } from '@/lib/chatSessions.functions'
+import { updateSessionTitle } from '@/lib/chatSessions.functions'
 
 interface SidebarProps {
   isOpen: boolean
@@ -20,17 +20,16 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const queryClient = useQueryClient()
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
+  const { title, lastEventTime, lastOpenedAt, lastUpdateTime } = session
 
-  const title = session.name
-  const lastActivityTime = session.lastEventTime ?? 0
   const hasNew =
     !isActive &&
-    lastActivityTime > 0 &&
-    lastActivityTime > (session.lastOpenedAt ?? session.lastUpdateTime)
+    lastEventTime !== undefined &&
+    lastEventTime > (lastOpenedAt ?? lastUpdateTime)
 
   const lastActiveLabel =
-    session.lastEventTime !== undefined
-      ? new Date(session.lastEventTime * 1000).toLocaleDateString('zh-TW', {
+    lastEventTime !== undefined
+      ? new Date(lastEventTime * 1000).toLocaleDateString('zh-TW', {
           month: 'short',
           day: 'numeric',
         })
@@ -56,10 +55,10 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
     }
 
     try {
-      await updateSession({
+      await updateSessionTitle({
         data: {
           sessionId: session.id,
-          name: trimmedTitle,
+          title: trimmedTitle,
         },
       })
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })

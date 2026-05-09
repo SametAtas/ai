@@ -14,7 +14,7 @@ const SESSION_LAST_OPENED_KEY = 'lastOpenedAt'
 
 export interface SessionListItem {
   id: string
-  name: string
+  title: string
   lastUpdateTime: number
   lastEventTime?: number
   lastOpenedAt?: number
@@ -40,7 +40,7 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
       // We cannot provide meaningful fallback for data in the state.
       return {
         id: session.id,
-        name:
+        title:
           typeof stateTitle === 'string' && stateTitle
             ? stateTitle
             : session.id,
@@ -107,12 +107,12 @@ export const createSession = createServerFn({ method: 'POST' })
 
 interface UpdateSessionInput {
   sessionId: string
-  name: string
+  title: string
 }
 
-export const updateSession = createServerFn({ method: 'POST' })
+export const updateSessionTitle = createServerFn({ method: 'POST' })
   .inputValidator((input: UpdateSessionInput) => input)
-  .handler(async ({ data: { sessionId, name } }) => {
+  .handler(async ({ data: { sessionId, title } }) => {
     const { data, error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -124,7 +124,7 @@ export const updateSession = createServerFn({ method: 'POST' })
           },
         },
         body: {
-          stateDelta: { [SESSION_TITLE_KEY]: name },
+          stateDelta: { [SESSION_TITLE_KEY]: title },
         },
       },
     )
