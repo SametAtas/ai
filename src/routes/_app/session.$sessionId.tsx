@@ -20,7 +20,14 @@ function SessionPage() {
     markSessionOpened({ data: sessionId }).then(() => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
     })
-  }, [sessionId, queryClient])
+  }, [
+    sessionId,
+    queryClient,
+
+    // Re-run when messages.length changes so new messages received while the user
+    // is viewing the session are also marked as read.
+    messages.length,
+  ])
 
   return (
     <>
