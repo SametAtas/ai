@@ -33,22 +33,22 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
     if (error) handleAdkError(error)
     return (data ?? []).map((session): SessionListItem => {
       const stateTitle = session.state?.[SESSION_TITLE_KEY]
-      const name =
-        typeof stateTitle === 'string' && stateTitle
-          ? stateTitle
-          : (session.events
-              ?.find(
-                (e) => e.content?.role === 'user' && e.content.parts?.[0]?.text,
-              )
-              ?.content?.parts?.[0]?.text?.slice(0, 40) ?? session.id)
       const lastEventTime = session.state?.[SESSION_LAST_EVENT_TIME_KEY]
       const lastOpenedAt = session.state?.[SESSION_LAST_OPENED_KEY]
+
+      // list_sessions always returns events=[] in both SQLite and PostgreSQL backends.
+      // We cannot provide meaningful fallback for data in the state.
       return {
         id: session.id,
-        name,
+        name:
+          typeof stateTitle === 'string' && stateTitle
+            ? stateTitle
+            : session.id,
         lastUpdateTime: session.lastUpdateTime,
-        lastEventTime: typeof lastEventTime === 'number' ? lastEventTime : undefined,
-        lastOpenedAt: typeof lastOpenedAt === 'number' ? lastOpenedAt : undefined,
+        lastEventTime:
+          typeof lastEventTime === 'number' ? lastEventTime : undefined,
+        lastOpenedAt:
+          typeof lastOpenedAt === 'number' ? lastOpenedAt : undefined,
       }
     })
   },
