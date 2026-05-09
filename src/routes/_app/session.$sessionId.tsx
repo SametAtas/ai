@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
 import { useChat } from '@/hooks/useChat'
-import { markSessionOpened } from '@/lib/sessions.functions'
+import { markSessionOpened } from '@/lib/chatSessions.functions'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
