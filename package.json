@@ -13,11 +13,13 @@
     "format": "prettier",
     "check": "prettier --write . && eslint --fix",
     "install:agent": "uv sync --project adk",
-    "typegen": "openapi-typescript http://localhost:8000/openapi.json -o src/lib/adk-types.d.ts && sed -i '' 's/: unknown/: {}/g' src/lib/adk-types.d.ts"
+    "typegen": "openapi-typescript http://localhost:8000/openapi.json -o src/lib/adk-types.d.ts && sed -i '' 's/: unknown/: {}/g' src/lib/adk-types.d.ts",
+    "codegen": "graphql-codegen"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
     "@fontsource-variable/noto-sans": "^5.2.10",
+    "@graphql-typed-document-node/core": "^3.2.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.0.6",
     "@tanstack/react-devtools": "^0.7.0",
@@ -29,6 +31,7 @@
     "@tanstack/router-plugin": "^1.132.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "jose": "^6.2.3",
     "langfuse": "^3.38.20",
     "lucide-react": "^0.574.0",
     "nitro": "latest",
@@ -36,6 +39,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
+    "react-peeps": "0.1.10",
     "remark-gfm": "^4.0.1",
     "shadcn": "^3.8.5",
     "tailwind-merge": "^3.4.1",
@@ -44,6 +48,8 @@
     "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
+    "@graphql-codegen/cli": "^7.0.0",
+    "@graphql-codegen/client-preset": "^6.0.0",
     "@tanstack/devtools-vite": "^0.3.11",
     "@tanstack/eslint-config": "^0.3.0",
     "@tanstack/react-query-devtools": "^5.99.2",
@@ -54,6 +60,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.2.1",
+    "graphql": "^16.13.2",
     "jsdom": "^27.0.0",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.5.3",

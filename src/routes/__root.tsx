@@ -6,10 +6,12 @@ import {
 } from '@tanstack/react-router'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import appCss from '../styles.css?url'
+import { AuthProvider } from '@/lib/auth'
+import { getCurrentUserServerFn } from '@/server/me.functions'
 
 export const Route = createRootRoute({
+  loader: async () => ({ serverLoadedUser: await getCurrentUserServerFn() }),
   head: () => ({
     meta: [
       {
@@ -57,26 +59,18 @@ export const Route = createRootRoute({
   shellComponent: RootDocument,
 })
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: Infinity,
-      gcTime: Infinity,
-    },
-  },
-})
-
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const { serverLoadedUser } = Route.useLoaderData()
   return (
     <html lang="zh-TW">
       <head>
         <HeadContent />
       </head>
       <body>
-        <QueryClientProvider client={queryClient}>
+        <AuthProvider serverLoadedUser={serverLoadedUser}>
           {children}
-          <ReactQueryDevtools />
-        </QueryClientProvider>
+        </AuthProvider>
+        <ReactQueryDevtools />
         <Scripts />
       </body>
     </html>
