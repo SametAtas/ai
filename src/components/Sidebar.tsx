@@ -26,15 +26,15 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const hasNew =
     !isActive &&
     lastActivityTime > 0 &&
-    lastActivityTime > (session.lastOpenedAt ?? 0)
+    lastActivityTime > (session.lastOpenedAt ?? session.lastUpdateTime)
 
-  const lastDisplayTime = session.lastEventTime ?? session.lastUpdateTime
-  const lastActiveLabel = lastDisplayTime
-    ? new Date(lastDisplayTime * 1000).toLocaleDateString('zh-TW', {
-        month: 'short',
-        day: 'numeric',
-      })
-    : '—'
+  const lastActiveLabel =
+    session.lastEventTime !== undefined
+      ? new Date(session.lastEventTime * 1000).toLocaleDateString('zh-TW', {
+          month: 'short',
+          day: 'numeric',
+        })
+      : '—'
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.preventDefault()
