@@ -94,7 +94,11 @@ export const createSession = createServerFn({ method: 'POST' })
         },
         // In the updated ADK schema, the body for /sessions/{session_id} POST
         // is expected to be the initial state (Record<string, any>).
-        body: name ? { [SESSION_TITLE_KEY]: name } : {},
+        body: {
+          ...(name ? { [SESSION_TITLE_KEY]: name } : {}),
+          [SESSION_LAST_EVENT_TIME_KEY]: Date.now() / 1000,
+          [SESSION_LAST_OPENED_KEY]: Date.now() / 1000,
+        },
       },
     )
 
