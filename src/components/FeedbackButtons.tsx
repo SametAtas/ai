@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { LangfuseWeb } from 'langfuse'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { FeedbackPopoverContent } from './FeedbackPopoverContent'
 import { useAuth } from '@/lib/auth'
+import { getFeedbackForTrace } from '@/server/feedbackScores.functions'
 
 const langfuse = import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
   ? new LangfuseWeb({
@@ -19,6 +21,17 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
   const { user } = useAuth()
   const [feedbackGiven, setFeedbackGiven] = useState<1 | -1 | null>(null)
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
+
+  const { data: persistedFeedback } = useQuery({
+    queryKey: ['feedback', traceId, user?.id ?? null],
+    queryFn: () => getFeedbackForTrace({ data: traceId }),
+    enabled: !!user,
+    staleTime: Infinity,
+  })
+
+  useEffect(() => {
+    if (persistedFeedback) setFeedbackGiven(persistedFeedback.value)
+  }, [persistedFeedback])
 
   const handleFeedback = (e: React.MouseEvent, value: 1 | -1) => {
     const next = feedbackGiven === value ? null : value

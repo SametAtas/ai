@@ -4,7 +4,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { clearUserScopedCache } from '../auth'
 
 describe('clearUserScopedCache', () => {
-  test('removes me / sessions / chat caches so an anonymous viewer cannot read prior user data', () => {
+  test('removes me / sessions / chat / feedback caches so an anonymous viewer cannot read prior user data', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, gcTime: Infinity } },
     })
@@ -21,6 +21,10 @@ describe('clearUserScopedCache', () => {
     )
     queryClient.setQueryData(['chat', 's1'], { messages: ['secret-1'] })
     queryClient.setQueryData(['chat', 's2'], { messages: ['secret-2'] })
+    queryClient.setQueryData(['feedback', 'trace-1', 'user-1'], {
+      value: 1,
+      comment: 'nice',
+    })
 
     clearUserScopedCache(queryClient)
 
@@ -28,6 +32,9 @@ describe('clearUserScopedCache', () => {
     expect(queryClient.getQueryData(['sessions'])).toBeUndefined()
     expect(queryClient.getQueryData(['chat', 's1'])).toBeUndefined()
     expect(queryClient.getQueryData(['chat', 's2'])).toBeUndefined()
+    expect(
+      queryClient.getQueryData(['feedback', 'trace-1', 'user-1']),
+    ).toBeUndefined()
   })
 
   test('leaves unrelated caches untouched', () => {

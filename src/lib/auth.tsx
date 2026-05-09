@@ -30,6 +30,7 @@ export function clearUserScopedCache(queryClient: QueryClient) {
   queryClient.setQueryData(ME_QUERY_KEY, null)
   queryClient.removeQueries({ queryKey: ['sessions'] })
   queryClient.removeQueries({ queryKey: ['chat'] })
+  queryClient.removeQueries({ queryKey: ['feedback'] })
 }
 
 interface AuthState {
