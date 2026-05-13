@@ -12,7 +12,7 @@ import json
 import re
 import time
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
@@ -21,6 +21,7 @@ from google.adk.apps import App
 from google.adk.models.llm_response import LlmResponse
 from google.adk.tools import google_search, url_context
 from google.adk.tools.agent_tool import AgentTool
+from google.adk.tools.base_tool import BaseTool
 from google.genai import types as genai_types
 
 from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
@@ -117,6 +118,15 @@ async def append_grounding_sources(
         else:
             sources.append(None)
 
+    # Save sources to temp state so writer's after_tool_callback can inject them
+    # into the structured tool response. Keyed by parent's function_call_id so
+    # parallel investigator/verifier calls don't overwrite each other.
+    call_id = callback_context.state.get("temp:_injected_call_id", "unknown")
+    callback_context.state[f"temp:{call_id}"] = [
+        {"title": src["title"], "url": src["resolved_url"]}
+        for src in sources if src
+    ]
+
     # ── B: Build combined text from all text parts ────────────────────────────
     combined = "".join(p.text or "" for p in llm_response.content.parts)
 
@@ -163,10 +173,20 @@ async def append_grounding_sources(
             source_lines.append("")
     combined += "\n".join(source_lines)
 
-    # ── F: Keep Search Widget for Google policy compliance ────────────────────
+    # ── F: Save Search Widget as artifact (Google policy compliance) ─────────
+    # Stored as an artifact rather than appended to LLM context to avoid ~2000
+    # tokens of HTML noise per investigator call.
     if metadata.search_entry_point and metadata.search_entry_point.rendered_content:
-        combined += "\n\n## Search Widget (Policy Requirement)\n"
-        combined += metadata.search_entry_point.rendered_content
+        filename = f"search-widget-{int(time.time() * 1000)}.html"
+        await callback_context.save_artifact(
+            filename=filename,
+            artifact=genai_types.Part(
+                inline_data=genai_types.Blob(
+                    mime_type="text/html",
+                    data=metadata.search_entry_point.rendered_content.encode("utf-8"),
+                )
+            ),
+        )
 
     # ── Write back: all text into first part, clear text in others ────────────
     first_text_idx = next(
@@ -465,6 +485,35 @@ ai_proofreader_minor_parties = LlmAgent(
 )
 
 
+async def before_tool(
+    tool: BaseTool, args: dict, tool_context: CallbackContext
+) -> Optional[dict]:
+    """Injects writer's function_call_id into state so append_grounding_sources
+    can key its temp state slot correctly (parallel-call safe)."""
+    if tool.name in ("investigator", "verifier"):
+        # temp: prefix ensures this key is cleared at turn end
+        tool_context.state["temp:_injected_call_id"] = tool_context.function_call_id
+    return None
+
+
+async def after_tool(
+    tool: BaseTool,
+    args: dict,
+    tool_context: CallbackContext,
+    tool_response: Any,
+) -> Optional[Any]:
+    """Wraps investigator/verifier plain-text response in a structured dict that
+    includes the grounding sources saved by append_grounding_sources."""
+    if tool.name not in ("investigator", "verifier"):
+        return None
+    call_id = tool_context.function_call_id
+    sources = tool_context.state.pop(f"temp:{call_id}", [])
+    if not sources:
+        return None
+    report = tool_response if isinstance(tool_response, str) else str(tool_response)
+    return {"report": report, "sources": sources}
+
+
 # Main AI Writer - Orchestrator agent
 #
 # Note: Due to ADK limitations, we cannot mix built-in tools (google_search, url_context)
@@ -485,6 +534,8 @@ ai_writer = LlmAgent(
             include_thoughts=True, thinking_level=genai_types.ThinkingLevel.HIGH
         )
     ),
+    before_tool_callback=before_tool,
+    after_tool_callback=after_tool,
     after_agent_callback=update_last_event_time,
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
@@ -539,8 +590,7 @@ ai_writer = LlmAgent(
        - Use the `investigator` to search Google and gather detailed information about claims.
        - Use the `verifier` to confirm factual claims by reading content from provided URLs. If `investigator` results contain URLs worth deeper analysis, pass them to `verifier` for verbatim extraction — you can batch up to 20 URLs in a single `verifier` call.
        - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
-       - **INVESTIGATOR SOURCES**: The `## Sources` section appended to `investigator` results contains the ONLY reliable URLs. Never invent URLs or copy links from the main narrative text.
-       - **GROUNDED SEGMENTS**: Investigator results also include a `## Grounded Segments` section listing exact quoted passages with their source numbers `[n,m,...]`. Use these to identify which URLs (from `## Sources`) to pass to `verifier` for deeper analysis of a specific claim.
+       - **INVESTIGATOR SOURCES**: The `sources` list in the `investigator`/`verifier` response contains the ONLY reliable URLs. Each entry has `title` and `url`. Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
 
     5. **Source Evaluation**: Have political perspective agents review key sources and materials used
 
