@@ -52,65 +52,100 @@ async def append_grounding_sources(
     llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
     """
-    After-model callback to append grounding sources to the response.
-    Extracts sources from grounding metadata, resolves redirect URLs,
-    and appends them as a markdown list.
+    After-model callback for ai_investigator.
+
+    Transforms the raw LLM response into a grounded research report:
+    - Inserts inline [N] citations where grounding_supports indicate real evidence
+    - Strips hallucinated (non-grounding) URLs that the LLM invented from training data
+    - Appends a numbered ## 查核來源 list resolved from grounding_chunks
     """
+    if not llm_response.grounding_metadata:
+        return None
     metadata = llm_response.grounding_metadata
     chunks = metadata.grounding_chunks
     if not chunks:
         return None
+    if not llm_response.content or not llm_response.content.parts:
+        return None
 
-    output_parts = ["\n\n## Sources Found\n"]
-    seen_urls = set()
-    url_map = {}  # original -> resolved
-
-    # 1. Collect and resolve all unique URLs from grounding chunks
+    # ── A: Resolve grounding chunks to real URLs ──────────────────────────────
+    # sources[i] is parallel to chunks[i]; citation number is i+1
+    sources = []
     for chunk in chunks:
-        if chunk.web and chunk.web.uri and chunk.web.uri not in seen_urls:
-            uri = chunk.web.uri
-            seen_urls.add(uri)
-            resolved_url = await resolve_vertex_redirect(uri)
-            url_map[uri] = resolved_url
+        if chunk.web and chunk.web.uri:
+            resolved = await resolve_vertex_redirect(chunk.web.uri)
+            sources.append({
+                "title": chunk.web.title or "Unknown Source",
+                "original_uri": chunk.web.uri,
+                "resolved_url": resolved,
+            })
+        else:
+            sources.append(None)
 
-            title = chunk.web.title or "Unknown Source"
-            display_uri = f"[{resolved_url}]({uri})" if resolved_url != uri else uri
+    # ── B: Build combined text from all text parts ────────────────────────────
+    combined = "".join(p.text or "" for p in llm_response.content.parts)
 
-            output_parts.append(f"**Source {len(seen_urls)}**: {title}")
-            output_parts.append(f"- **URL**: {display_uri}")
-            output_parts.append("") # Extra newline
+    # ── C: Insert inline [N] citations at grounding_supports positions ─────────
+    # grounding_supports maps text segments (start/end char indices) to chunk indices.
+    # Process from end to start so earlier positions stay valid after each insertion.
+    supports = getattr(metadata, 'grounding_supports', None) or []
+    insertions = []
+    for support in supports:
+        seg = getattr(support, 'segment', None)
+        if not seg:
+            continue
+        indices = sorted(set(getattr(support, 'grounding_chunk_indices', []) or []))
+        valid = [i for i in indices if i < len(sources) and sources[i]]
+        if valid:
+            citation = "".join(f"[{i+1}]" for i in valid)
+            insertions.append((seg.end_index, citation))
 
-    # 2. Perform "markdown work" in response text (formerly resolve_investigator_urls)
-    # Replace occurrences of grounding redirect URLs in the main text
-    if llm_response.content and llm_response.content.parts:
-        for part in llm_response.content.parts:
-            if not part.text:
-                continue
-            for original_url, resolved_url in url_map.items():
-                if resolved_url != original_url:
-                    # If the URL is already inside a markdown link [label](original),
-                    # replace the entire markdown link with our resolved one.
-                    markdown_pattern = re.compile(r'\[[^\]]*\]\(' + re.escape(original_url) + r'\)')
-                    if markdown_pattern.search(part.text):
-                        part.text = markdown_pattern.sub(f"[{resolved_url}]({original_url})", part.text)
-                    else:
-                        # Otherwise just replace the raw URL
-                        part.text = part.text.replace(original_url, f"[{resolved_url}]({original_url})")
+    insertions.sort(key=lambda x: x[0], reverse=True)
+    for pos, citation in insertions:
+        if 0 <= pos <= len(combined):
+            combined = combined[:pos] + citation + combined[pos:]
 
-    # 3. Append Search Widget if present (Policy requirement)
+    # ── D: Strip hallucinated (non-grounding) URLs ────────────────────────────
+    # Markdown links with non-grounding URLs: keep the label text, drop the URL.
+    combined = re.sub(
+        r'\[([^\]]+)\]\(https?://(?!vertexaisearch\.cloud\.google\.com)[^\)]+\)',
+        r'\1',
+        combined,
+    )
+    # Bare non-grounding URLs: remove entirely.
+    combined = re.sub(
+        r'https?://(?!vertexaisearch\.cloud\.google\.com)\S+',
+        '',
+        combined,
+    )
+
+    # ── E: Append numbered 查核來源 ───────────────────────────────────────────
+    source_lines = ["\n\n## 查核來源\n"]
+    for i, src in enumerate(sources, 1):
+        if src:
+            resolved = src["resolved_url"]
+            original = src["original_uri"]
+            source_lines.append(f"[{i}] **{src['title']}**")
+            source_lines.append(resolved if resolved != original else original)
+            if resolved != original:
+                source_lines.append(f"（原始連結: {original}）")
+            source_lines.append("")
+    combined += "\n".join(source_lines)
+
+    # ── F: Keep Search Widget for Google policy compliance ────────────────────
     if metadata.search_entry_point and metadata.search_entry_point.rendered_content:
-        output_parts.append("\n\n## Search Widget (Policy Requirement)\n")
-        output_parts.append(metadata.search_entry_point.rendered_content)
+        combined += "\n\n## Search Widget (Policy Requirement)\n"
+        combined += metadata.search_entry_point.rendered_content
 
-    if len(output_parts) > 1:
-        # Append to the first part of the content
-        if llm_response.content and llm_response.content.parts:
-            # Ensure the first part is text
-            if not llm_response.content.parts[0].text:
-                llm_response.content.parts[0].text = ""
-
-            llm_response.content.parts[0].text += "\n".join(output_parts)
-            return llm_response
+    # ── Write back: all text into first part, clear text in others ────────────
+    first_text_idx = next(
+        (i for i, p in enumerate(llm_response.content.parts) if p.text is not None),
+        0,
+    )
+    llm_response.content.parts[first_text_idx].text = combined
+    for i, part in enumerate(llm_response.content.parts):
+        if i != first_text_idx and part.text is not None:
+            part.text = ""
 
     return llm_response
 
@@ -122,78 +157,80 @@ ai_investigator = LlmAgent(
     description="AI agent specialized in web research using Google Search for fact-checking.",
     after_model_callback=append_grounding_sources,
     instruction="""
-    You are an AI Investigator specialized in web research for fact-checking. Your role is to conduct thorough web research and provide properly structured source citations.
+    You are an AI Investigator specialized in web research for fact-checking. Your role is to find evidence and synthesize research findings that help fact-checkers assess suspicious messages.
 
-    ## Core Responsibilities:
+    ## CRITICAL RULE — No URLs in Your Text
+    絕對不要在回應文字中加入任何 URL、超連結或網址。
+    所有來源連結會由系統從搜尋結果中自動提取和標注。
+    若你在文字裡放入任何 URL，查核員會看到未經驗證的連結，這是嚴重的品質問題。
+
+    ## Core Responsibilities
 
     1. **Web Search**: Use Google Search to find authoritative sources and primary information
-    2. **Source Discovery**: Identify credible news sources, official statements, and expert opinions
-    3. **Evidence Collection**: Gather diverse perspectives and supporting evidence from the web
+    2. **Evidence Synthesis**: Analyze search results and synthesize key findings
+    3. **Source Credibility Assessment**: Evaluate whether sources are credible and note limitations
 
-    ## Research Strategy:
+    ## Research Strategy
 
     When investigating claims:
     - Search for official sources (government, institutions, organizations)
     - Look for recent news coverage from multiple outlets
     - Find expert opinions and analysis
-    - Search for original documents or statements when possible
     - Cross-verify information across multiple credible sources
+    - Note when you cannot find strong evidence and explain why
 
-    ## Output Requirements:
+    ## Output Format
 
-    1. **Comprehensive Report**: Synthesize information from all search results into a coherent answer.
-    2. **Search Queries**: List the search queries used.
+    Write a research report for a fact-checker colleague. Prioritize verbatim quotation over summary:
 
-    Focus on providing comprehensive, well-sourced research content.
+    1. **Key Findings**: For each relevant finding, transcribe the exact text from search results
+       in a block quote (using `>`). Only add a one-line label before the quote to give context
+       (e.g., the source type or what claim it relates to). Do not paraphrase.
+    2. **Source Quality**: Brief note on credibility of sources found.
+    3. **Evidence Gaps**: What could NOT be found or confirmed in search results.
+    4. **Search Queries Used**: List the exact queries you searched.
+
+    If a search result snippet is directly relevant, transcribe it word-for-word.
+    The writer will judge relevance and draw conclusions — your job is faithful transcription.
+    The system will automatically attach verified source links.
     """,
     tools=[google_search]
 )
 
 
-# AI Verifier - URL content vs claim verification specialist
+# AI Verifier - Verbatim quote extractor from URLs
 ai_verifier = LlmAgent(
     name="verifier",
     model="gemini-2.5-pro",
-    description="AI agent that reads URL content and verifies claims. Input: URL (required) and Claim (optional).",
+    description="AI agent that reads a URL and extracts verbatim relevant passages. Input: URL (required) and topic/claim (optional).",
+    after_model_callback=append_grounding_sources,
     instruction="""
-    You are an AI Verifier with a very specific and crucial task: verify whether the content of given URLs actually supports the claims being made.
+    You are an AI Verifier that extracts verbatim source material from web pages for fact-checking.
 
-    ## Core Mission:
-    1. **Verify Claims**: Determine if there is a genuine connection between claims and their cited URLs
-    2. **Fact Checking**: Check statements against provided sources
+    ## CRITICAL RULE — No URLs in Your Text
+    絕對不要在回應文字中加入任何 URL。所有來源連結會由系統自動標注。
 
-    ## Common Problems You Help Solve:
-    1. **False Citation**: Message contains multiple claims + a URL, but the URL content doesn't mention those claims at all
-    2. **Misrepresented Sources**: Research reports claim "Source X says Y" but when you check Source X, it never says Y
-    3. **Weak Support**: URL content is vaguely related but doesn't actually support the specific claim being made
+    ## Your Task
+    Given a URL and optionally a topic or claim to investigate:
+    1. Use url_context to read the URL
+    2. Find the passages most relevant to the given topic/claim
+    3. Transcribe those passages verbatim — exact wording from the source, using block quotes (>)
+    4. If the topic/claim is not mentioned at all, state that clearly and briefly describe what the article IS about
 
-    ## Your Process:
-    1. **Navigate to URL**: Use url_context tool to get the actual content
-    2. **Extract Claims**: Identify the specific claims to verify (if provided) OR simply summarize the content (if just asked to read)
-    3. **Content Analysis**: Carefully read through the URL content
-    4. **Match Verification**: Check if the content actually mentions or supports the claim
-    5. **Report Findings**: State the final URL, content summary, and verification result
+    ## Output Format
 
+    For each relevant passage:
+    - One-line context label (e.g., "關於 X" or "針對「Y」的說明")
+    - Exact verbatim block quote
 
-    ## Output Format:
-    For each URL processed, you MUST provide:
-    - **URL**: [The URL being verified]
-    - **CLAIM**: [The specific statement being verified, or "N/A" if just resolving URL]
-    - **URL CONTENT**: [Brief summary of what the URL actually says]
-    - **VERIFICATION RESULT**:
-      * ✅ SUPPORTED: URL clearly supports this claim (include specific quote)
-      * ❌ NOT SUPPORTED: URL doesn't mention or contradicts this claim
-      * ⚠️ PARTIALLY SUPPORTED: URL mentions related info but doesn't fully support the claim
-      * 🔍 UNCLEAR: URL content is ambiguous or insufficient to verify
+    If no relevant content is found:
+    > 本文未提及「[主題]」。文章主要討論的是：[一句話描述文章實際內容]
 
-    ## Key Principles:
-    - Be extremely literal and precise
-    - Don't make logical leaps or inferences beyond what's explicitly stated
-    - If a URL doesn't directly mention a claim, say so clearly
-    - Quote exact text from sources when possible
-    - Focus on factual verification, not editorial judgment
-
-    This verification is critical for combating misinformation that relies on fake or misleading citations.
+    ## Key Principles
+    - Quote exactly — never paraphrase or summarize the source text
+    - The writer judges relevance and draws conclusions; your job is faithful transcription
+    - If the article is long, quote the 2–3 most relevant paragraphs
+    - Do not add editorial judgment, verdicts, or analysis
     """,
     tools=[url_context]
 )
@@ -446,6 +483,7 @@ ai_writer = LlmAgent(
        - Delegate deep research and web gathering to the `investigator`.
        - Use the `verifier` to confirm factual claims by reading content from provided URLs.
        - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
+       - **INVESTIGATOR SOURCES**: The investigator's inline `[N]` citations and `## 查核來源` numbered list are the ONLY reliable URL sources. Never copy any URL from the investigator's main research narrative — only the `## 查核來源` section contains real, verified URLs.
 
     5. **Source Evaluation**: Have political perspective agents review key sources and materials used
 
