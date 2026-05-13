@@ -206,7 +206,7 @@ ai_investigator = LlmAgent(
 ai_verifier = LlmAgent(
     name="verifier",
     model="gemini-3-flash-preview",
-    description="AI agent that reads a URL and extracts verbatim relevant passages. Input: URL (required) and topic/claim (optional).",
+    description="AI agent that reads up to 20 URLs and extracts verbatim relevant passages. Input: one or more URLs (required) and topic/claim (optional). Prefer batching multiple URLs into a single call.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.MINIMAL
@@ -220,8 +220,8 @@ ai_verifier = LlmAgent(
     絕對不要在回應文字中加入任何 URL。所有來源連結會由系統自動標注。
 
     ## Your Task
-    Given a URL and optionally a topic or claim to investigate:
-    1. Use url_context to read the URL
+    Given one or more URLs (up to 20) and optionally a topic or claim to investigate:
+    1. Use url_context to read the URL(s) — you can pass multiple URLs in one call
     2. Find the passages most relevant to the given topic/claim
     3. Transcribe those passages verbatim — exact wording from the source, using block quotes (>)
     4. If the topic/claim is not mentioned at all, state that clearly and briefly describe what the article IS about
@@ -490,7 +490,7 @@ ai_writer = LlmAgent(
 
     4. **Delegate Research**: Use investigator and verifier agents to research claims and verify citations
        - Use the `investigator` to search Google and gather detailed information about claims.
-       - Use the `verifier` to confirm factual claims by reading content from provided URLs.
+       - Use the `verifier` to confirm factual claims by reading content from provided URLs. If `investigator` results contain URLs worth deeper analysis, pass them to `verifier` for verbatim extraction — you can batch up to 20 URLs in a single `verifier` call.
        - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
        - **INVESTIGATOR SOURCES**: The `## 查核來源` section appended to `investigator` results contains the ONLY reliable URLs. Never invent URLs or copy links from the main narrative text.
 
