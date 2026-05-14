@@ -92,20 +92,19 @@ async def append_grounding_sources(
     if not llm_response.content or not llm_response.content.parts:
         return None
 
-    # ── A: Resolve grounding chunks to real URLs ──────────────────────────────
-    # Build sources_list and a chunk-index → sources_list-index mapping in one pass.
+    # ── A: Resolve grounding chunks to real URLs (1:1 with chunks) ───────────
     sources_list = []
-    chunk_to_src_idx: dict[int, int] = {}
-    for i, chunk in enumerate(chunks):
+    for chunk in chunks:
         if chunk.web and chunk.web.uri:
             resolved = await resolve_vertex_redirect(chunk.web.uri)
-            chunk_to_src_idx[i] = len(sources_list)
             sources_list.append(
                 {
                     "title": chunk.web.title or "Unknown Source",
                     "url": resolved,
                 }
             )
+        else:
+            sources_list.append({"title": "Unknown Source", "url": None})
 
     # ── B: Build content from all text parts ─────────────────────────────────
     content = "".join(p.text or "" for p in llm_response.content.parts)
@@ -124,32 +123,34 @@ async def append_grounding_sources(
         content,
     )
 
-    # ── E: Build grounded_segments as structured list ─────────────────────────
-    grounded_segments = []
+    # ── E: Build grounding_supports preserving Gemini segment positions ──────
+    grounding_supports = []
     seen_texts: set[str] = set()
     for support in metadata.grounding_supports or []:
         seg = support.segment
         if not seg or not seg.text:
             continue
-        text = seg.text.strip()
-        if text in seen_texts:
+        if seg.text in seen_texts:
             continue
-        seen_texts.add(text)
-        src_ids = sorted(
+        seen_texts.add(seg.text)
+        src_ids = sorted(set(support.grounding_chunk_indices or []))
+        grounding_supports.append(
             {
-                chunk_to_src_idx[i]
-                for i in (support.grounding_chunk_indices or [])
-                if i in chunk_to_src_idx
+                "segment": {
+                    "start_index": seg.start_index,
+                    "end_index": seg.end_index,
+                    "text": seg.text,
+                },
+                "source_ids": src_ids,
             }
         )
-        grounded_segments.append({"text": text, "source_ids": src_ids})
 
     # ── Write back as JSON so writer's after_tool_callback gets structured output
     serialized = json.dumps(
         {
             "content": content,
             "sources": sources_list,
-            "grounded_segments": grounded_segments,
+            "grounding_supports": grounding_supports,
         },
         ensure_ascii=False,
     )
@@ -187,7 +188,7 @@ ai_investigator = LlmAgent(
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
     #
     model="gemini-3-flash-preview",
-    description="Searches Google and returns detailed search findings for fact-checking.",
+    description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources, grounding_supports} — sources lists reliable {title, url} pairs; grounding_supports maps content passages to source indices.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.MEDIUM
@@ -554,12 +555,12 @@ ai_writer = LlmAgent(
     3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message
 
     4. **Delegate Research**: Use investigator and verifier agents to research claims and verify citations
-       - Use the `investigator` to search Google and gather detailed information about claims.
+       - Delegate research tasks to the `investigator` — describe what you want to know, and it will search the web and report findings.
        - Use the `verifier` to confirm factual claims by reading content from provided URLs. If `investigator` results contain URLs worth deeper analysis, pass them to `verifier` for verbatim extraction — you can batch up to 20 URLs in a single `verifier` call.
        - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
-       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator`/`verifier` return `{{"content": "...", "sources": [...], "grounded_segments": [...]}}`.
+       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator`/`verifier` return `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
          `sources` is a list of `{{"title": "...", "url": "..."}}` — these are the ONLY reliable URLs.
-         `grounded_segments` is a list of `{{"text": "...", "source_ids": [...]}}` mapping each grounded sentence to indices in `sources`.
+         `grounding_supports` is a list of `{{"segment": {{"start_index": N, "end_index": N, "text": "..."}}, "source_ids": [...]}}` mapping each passage in `content` (by character position) to indices in `sources`.
          Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
 
     5. **Source Evaluation**: Have political perspective agents review key sources and materials used
