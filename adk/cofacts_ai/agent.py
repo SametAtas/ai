@@ -162,6 +162,60 @@ async def append_grounding_sources(
     return _set_text_content(llm_response, serialized)
 
 
+async def append_url_context_sources(
+    callback_context: CallbackContext, llm_response: LlmResponse
+) -> Optional[LlmResponse]:
+    """
+    After-model callback for ai_verifier.
+
+    Captures clean URL-title pairs from url_context grounding_chunks and wraps
+    the response as {content, sources} JSON. Intentionally omits grounding_supports
+    (too scattered for url_context). Unlike investigator, url_context already returns
+    real URLs so resolve_vertex_redirect is a no-op here but kept for safety.
+    """
+    if not llm_response.grounding_metadata:
+        return None
+    metadata = llm_response.grounding_metadata
+    chunks = metadata.grounding_chunks
+    if not chunks or not llm_response.content or not llm_response.content.parts:
+        return None
+
+    async def _resolve(chunk) -> Optional[str]:
+        return (
+            await resolve_vertex_redirect(chunk.web.uri)
+            if chunk.web and chunk.web.uri
+            else None
+        )
+
+    resolved_urls = await asyncio.gather(*[_resolve(c) for c in chunks])
+    sources_list = [
+        {
+            "title": (chunk.web and chunk.web.title) or "Unknown Source",
+            "url": resolved,
+        }
+        for chunk, resolved in zip(chunks, resolved_urls)
+    ]
+
+    content = "".join(p.text or "" for p in llm_response.content.parts)
+    # Strip any bare non-grounding URLs the LLM may have hallucinated.
+    content = re.sub(
+        r"\[([^\]]+)\]\(https?://(?!vertexaisearch\.cloud\.google\.com)[^\)]+\)",
+        r"\1",
+        content,
+    )
+    content = re.sub(
+        r"https?://(?!vertexaisearch\.cloud\.google\.com)\S+",
+        "",
+        content,
+    )
+
+    serialized = json.dumps(
+        {"content": content, "sources": sources_list},
+        ensure_ascii=False,
+    )
+    return _set_text_content(llm_response, serialized)
+
+
 async def save_search_widget(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
@@ -233,7 +287,8 @@ ai_verifier = LlmAgent(
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
     #
     model="gemini-3-flash-preview",
-    description="A fact-checking verifier that reads up to 20 URLs and determines which sources actually support each given claim. Input: a list of claims to verify and a list of URLs to check against. Returns a per-claim verification report with supporting quotes.",
+    description="A fact-checking verifier that reads up to 20 URLs and determines which sources actually support each given claim. Input: a list of claims to verify and a list of URLs to check against. Returns {content, sources} — content is a per-claim verification report with quotes; sources lists {title, url} pairs for all pages read.",
+    after_model_callback=append_url_context_sources,
     instruction="""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
@@ -245,21 +300,18 @@ ai_verifier = LlmAgent(
 
     ## Output Format
 
-    For each claim:
-    - State the claim clearly
-    - List which sources support it (by title/domain), quoting the relevant passage
-    - If no source supports the claim, say so explicitly
+    For each claim, use the article's full title (as it appears on the page) to identify the source:
 
-    Example:
     **Claim: 「龍葵鹼致死劑量約為 3–6 mg/kg」**
-    ✓ 支持來源：vghtpe.gov.tw — >「龍葵鹼對人體的急性致死劑量估計約為 3 至 6 mg/kg」
-    ✓ 支持來源：commonhealth.com.tw — >「每公斤體重攝入 3mg 以上即有生命危險」
-    ✗ heho.com.tw — 文章未提及致死劑量
+    ✓ 支持來源：《龍葵鹼中毒的症狀與治療》— >「龍葵鹼對人體的急性致死劑量估計約為 3 至 6 mg/kg」
+    ✓ 支持來源：《馬鈴薯發芽的危害》— >「每公斤體重攝入 3mg 以上即有生命危險」
+    ✗ 《台灣食安新聞彙整》— 文章未提及致死劑量
 
     **Claim: 「台灣目前只有 2 間實驗室能檢測龍葵鹼」**
     ✗ 所有來源均未提及此數據
 
     ## Key Principles
+    - Identify each source by its article title, not by domain name — the same domain may have multiple articles
     - A source supports a claim only if its content contains direct, specific evidence — not merely related topic
     - Quote the supporting passage verbatim
     - Do not add analysis or verdicts beyond what the sources say
@@ -472,9 +524,9 @@ async def after_tool(
     tool_context: CallbackContext,
     tool_response: Any,
 ) -> Optional[Any]:
-    """Deserializes the JSON response from investigator into a dict so
-    the writer LLM receives a structured {content, sources, grounding_supports} object."""
-    if tool.name != "investigator":
+    """Deserializes the JSON response from investigator/verifier into a dict so
+    the writer LLM receives structured output."""
+    if tool.name not in ("investigator", "verifier"):
         return None
     if not isinstance(tool_response, str):
         return None
@@ -563,6 +615,9 @@ ai_writer = LlmAgent(
          `sources` is a list of `{{"title": "...", "url": "..."}}` — these are the ONLY reliable URLs.
          `grounding_supports` is a list of `{{"segment": {{"start_index": N, "end_index": N, "text": "..."}}, "source_ids": [...]}}` mapping each passage in `content` (by character position) to indices in `sources`.
          Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
+       - **VERIFIER RESPONSE SCHEMA**: `verifier` returns `{{"content": "...", "sources": [...]}}`.
+         `content` is a per-claim verification report (which article titles support or refute each claim, with verbatim quotes).
+         `sources` is a list of `{{"title": "...", "url": "..."}}` for all pages read — use these to find the URL for any article title mentioned in `content`.
 
     5. **Source Evaluation**: Have political perspective agents review key sources and materials used
 
