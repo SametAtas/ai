@@ -288,7 +288,7 @@ ai_verifier = LlmAgent(
     ✗ 《Ocean Life Encyclopedia》— Article covers shark behavior but contains no attack statistics.
 
     **Claim: "Humans only need 4 hours of sleep per night"**
-    ✗ None of the sources support this claim; all sources state the recommended sleep duration for adults is 7–9 hours.
+    ✗ None of the sources support this claim.
 
     ## Key Principles
     - Identify each source by its article title, not by domain name — the same domain may have multiple articles
