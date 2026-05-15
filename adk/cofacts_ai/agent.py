@@ -590,7 +590,9 @@ ai_writer = LlmAgent(
 
     4. **Delegate Research**: Use investigator and verifier agents to research claims and verify citations
        - Delegate research tasks to the `investigator` — describe what you want to know, and it will search the web and report findings.
-       - Use the `verifier` to check whether specific claims are actually supported by specific URLs. Pass a list of claims and a list of URLs (up to 20); it reads all pages and returns a per-claim report with supporting quotes. Good uses: (1) verify claims in a suspicious message against links it cites, (2) verify investigator findings against investigator sources, (3) verify every claim in your draft fact-check reply has a corresponding source.
+       - Use the `verifier` to check whether specific claims are actually supported by specific URLs. Pass a list of claims and a list of URLs (up to 20); it reads all pages and returns a per-claim report with supporting quotes.
+       - **If the suspicious message contains URLs**: call `verifier` with those URLs and the message's key claims BEFORE researching further. Viral messages frequently exaggerate, misattribute, or fabricate what their cited sources actually say. Confirm the source says what the message claims before treating it as evidence.
+       - **Do not blindly trust investigator summaries**: investigator reads and summarizes pages — its summary can err. For any specific claim or number you plan to cite in the reply, use `verifier` to confirm the original source actually supports it.
        - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
        - **INVESTIGATOR RESPONSE SCHEMA**: `investigator`/`verifier` return `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
          `sources` is a list of `{{"title": "...", "url": "..."}}` — these are the ONLY reliable URLs.
@@ -603,6 +605,7 @@ ai_writer = LlmAgent(
     5. **Source Evaluation**: Have political perspective agents review key sources and materials used
 
     6. **Compose Reply**:
+       - Before writing, run `verifier` on your key claims and their intended source URLs if you have not already done so. Every factual claim in the reply must be confirmed by a source — not just mentioned by investigator.
        - Write fact-check reply following Cofacts format (separate text and references fields)
        - Text field: Focus on clear explanation without URLs or citations
        - References field: List all supporting sources separately
