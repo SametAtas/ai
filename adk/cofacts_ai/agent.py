@@ -96,7 +96,11 @@ async def append_grounding_sources(
     # ── A: Resolve grounding chunks to real URLs in parallel (1:1 with chunks) ─
 
     async def _resolve(chunk) -> Optional[str]:
-        return await resolve_vertex_redirect(chunk.web.uri) if chunk.web and chunk.web.uri else None
+        return (
+            await resolve_vertex_redirect(chunk.web.uri)
+            if chunk.web and chunk.web.uri
+            else None
+        )
 
     resolved_urls = await asyncio.gather(*[_resolve(c) for c in chunks])
     sources_list = [
@@ -230,11 +234,6 @@ ai_verifier = LlmAgent(
     #
     model="gemini-3-flash-preview",
     description="A fact-checking verifier that reads up to 20 URLs and determines which sources actually support each given claim. Input: a list of claims to verify and a list of URLs to check against. Returns a per-claim verification report with supporting quotes.",
-    generate_content_config=genai_types.GenerateContentConfig(
-        thinking_config=genai_types.ThinkingConfig(
-            thinking_level=genai_types.ThinkingLevel.MEDIUM
-        )
-    ),
     instruction="""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
