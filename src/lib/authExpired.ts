@@ -1,10 +1,9 @@
-// Centralized 'session expired' handler. When any client-side call to a
-// server function or fetch returns 401 (cookie/JWT expired or missing), we
-// must (a) drop user-scoped caches so stale data from the previous session
-// isn't shown, (b) reset useAuth().user to null so the layout switches to
-// the logged-out landing, and (c) prompt the user to re-authenticate. We
-// use a custom DOM event to keep this module React-free; AuthProvider
-// listens for it and opens LoginModal.
+// Centralized 'session expired' handler. When the client detects an expired
+// or missing session cookie, we must (a) drop user-scoped caches so stale
+// data from the previous session isn't shown, (b) reset useAuth().user to
+// null so the layout switches to the logged-out landing, and (c) prompt the
+// user to re-authenticate. We use a custom DOM event to keep this module
+// React-free; AuthProvider listens for it and opens LoginModal.
 
 import type { QueryClient } from '@tanstack/react-query'
 import { clearUserScopedCache } from './auth'
