@@ -15,6 +15,7 @@ from opentelemetry.trace import get_current_span
 logger = logging.getLogger(__name__)
 
 _SESSION_ID_ATTR = SpanAttributes.SESSION_ID
+_LANGFUSE_TRACE_ID_KEY = "langfuse_trace_id"
 
 
 class RootSessionSpanProcessor(SpanProcessor):
@@ -29,7 +30,7 @@ class RootSessionSpanProcessor(SpanProcessor):
     """
 
     def __init__(self):
-        self._root_sessions: dict[int, str] = {}  # trace_id -> root session_id
+        self._root_sessions: dict[int, str] = {}
 
     def on_start(self, span, parent_context=None):
         session_id = (span.attributes or {}).get(_SESSION_ID_ATTR)
@@ -42,14 +43,17 @@ class RootSessionSpanProcessor(SpanProcessor):
         trace_id = span_ctx.trace_id
 
         parent_span_ctx = get_current_span(parent_context).get_span_context()
-        is_root = not parent_span_ctx.is_valid
-
-        if is_root and trace_id not in self._root_sessions:
-            self._root_sessions[trace_id] = session_id
-        else:
-            root = self._root_sessions.get(trace_id)
-            if root and session_id != root:
+        if not parent_span_ctx.is_valid:
+            # Root or context-detached sub-agent span: register the first one seen.
+            # setdefault is atomic under the GIL and returns the winning value.
+            root = self._root_sessions.setdefault(trace_id, session_id)
+            if root != session_id:
                 span.set_attribute(_SESSION_ID_ATTR, root)
+            return
+
+        root = self._root_sessions.get(trace_id)
+        if root and session_id != root:
+            span.set_attribute(_SESSION_ID_ATTR, root)
 
     def on_end(self, span):
         if span.parent is None and span.context is not None:
@@ -101,7 +105,4 @@ class LangfuseTracingPlugin(BasePlugin):
             # future events in this invocation before they are saved to the DB.
             if invocation_context.run_config.custom_metadata is None:
                 invocation_context.run_config.custom_metadata = {}
-            invocation_context.run_config.custom_metadata["langfuse_trace_id"] = (
-                trace_id
-            )
-        return None
+            invocation_context.run_config.custom_metadata[_LANGFUSE_TRACE_ID_KEY] = trace_id
