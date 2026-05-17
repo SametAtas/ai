@@ -14,8 +14,11 @@ from opentelemetry.trace import get_current_span
 
 logger = logging.getLogger(__name__)
 
+# openinference semconv: "session.id"
 _SESSION_ID_ATTR = SpanAttributes.SESSION_ID
+# Langfuse-specific attribute that takes precedence over session.id in OTLP ingestion
 _LANGFUSE_SESSION_ID_ATTR = "langfuse.session.id"
+# Key used in event.custom_metadata to link events back to their Langfuse trace
 _LANGFUSE_TRACE_ID_KEY = "langfuse_trace_id"
 
 
