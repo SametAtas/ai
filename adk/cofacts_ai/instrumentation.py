@@ -10,68 +10,47 @@ from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.trace import SpanProcessor
 from opentelemetry.sdk.trace import TracerProvider as SDKTracerProvider
+from opentelemetry.trace import get_current_span
 
 logger = logging.getLogger(__name__)
 
 _SESSION_ID_ATTR = SpanAttributes.SESSION_ID
+_LANGFUSE_SESSION_ID_ATTR = "langfuse.session.id"
 _LANGFUSE_TRACE_ID_KEY = "langfuse_trace_id"
 
 
 class RootSessionSpanProcessor(SpanProcessor):
     """
-    Ensures all spans in an OTel trace share the root span's session.id.
+    Stamps langfuse.session.id on every span by propagating from the parent.
 
-    Google ADK spawns a new session per sub-agent invocation, causing
-    openinference to stamp sub-agent spans with a different session.id.
-    Langfuse's last-write-wins OTLP ingestion then assigns the trace to the
-    wrong session. This processor overwrites every child span's session.id
-    with the root span's value before the span is exported.
+    GoogleADKInstrumentor incorrectly stamps sub-agent spans with ADK-internal
+    session UUIDs (https://github.com/Arize-ai/openinference/issues/3117).
+    Langfuse gives langfuse.session.id precedence over session.id, so we read
+    the parent span's session at on_start time and copy it down — non-destructively
+    and without maintaining any state.
     """
 
-    def __init__(self):
-        self._root_sessions: dict[int, str] = {}
-        self._root_spans: dict[int, int] = {}  # trace_id -> span_id that registered the session
-
     def on_start(self, span, parent_context=None):
-        session_id = (span.attributes or {}).get(_SESSION_ID_ATTR)
-        if not isinstance(session_id, str):
-            return
+        parent = get_current_span(parent_context)
+        parent_attrs = getattr(parent, "attributes", None) or {}
 
-        span_ctx = span.get_span_context()
-        if span_ctx is None:
-            return
-        trace_id = span_ctx.trace_id
+        # Prefer langfuse.session.id (already corrected) over session.id (may be wrong)
+        session = (
+            parent_attrs.get(_LANGFUSE_SESSION_ID_ATTR)
+            or parent_attrs.get(_SESSION_ID_ATTR)
+        )
 
-        # span.parent is the authoritative OTel parent SpanContext (set during
-        # span creation). parent_context is the ambient context at call time and
-        # may not reflect the actual parent when openinference detaches context.
-        is_root = span.parent is None or not span.parent.is_valid
-        if is_root:
-            # Root or context-detached span: register the first session seen per
-            # trace. setdefault is atomic under the GIL.
-            root = self._root_sessions.setdefault(trace_id, session_id)
-            if root == session_id:
-                # We just registered this trace — record this span as the
-                # canonical root so on_end knows when it's safe to clean up.
-                self._root_spans[trace_id] = span_ctx.span_id
-            else:
-                span.set_attribute(_SESSION_ID_ATTR, root)
-            return
+        if session is None:
+            # No parent session — fall back to own session.id (root span)
+            own = (span.attributes or {}).get(_SESSION_ID_ATTR)
+            if isinstance(own, str):
+                session = own
 
-        root = self._root_sessions.get(trace_id)
-        if root and session_id != root:
-            span.set_attribute(_SESSION_ID_ATTR, root)
+        if isinstance(session, str):
+            span.set_attribute(_LANGFUSE_SESSION_ID_ATTR, session)
 
     def on_end(self, span):
-        if span.context is None:
-            return
-        trace_id = span.context.trace_id
-        # Only clean up when the specific span that registered the root session ends.
-        # Sub-agent invocation spans are also context-detached (span.parent is None)
-        # but must not trigger cleanup before their child agent_run spans are processed.
-        if self._root_spans.get(trace_id) == span.context.span_id:
-            self._root_sessions.pop(trace_id, None)
-            self._root_spans.pop(trace_id, None)
+        pass
 
 
 def setup_instrumentation():
