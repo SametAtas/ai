@@ -337,6 +337,29 @@ function ProofreaderContent({
   )
 }
 
+// ── Copy button ──────────────────────────────────────────────────
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <button
+      onClick={handleCopy}
+      disabled={!value}
+      className="ml-auto text-gray-400 hover:text-gray-600 disabled:opacity-0 transition-colors"
+      aria-label="複製"
+    >
+      <span className="material-symbols-outlined text-base">
+        {copied ? 'check' : 'content_copy'}
+      </span>
+    </button>
+  )
+}
+
 // ── Draft Factcheck ──────────────────────────────────────────────
 
 type ReplyCategory = 'NOT_ARTICLE' | 'RUMOR' | 'NOT_RUMOR' | 'OPINIONATED'
@@ -419,8 +442,9 @@ function DraftFactcheckContent({
 
       {/* Response text */}
       <div className="space-y-2">
-        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block">
+        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center">
           回應內容
+          <CopyButton value={text} />
         </label>
         <div className="w-full min-h-[11rem] p-3 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg leading-relaxed whitespace-pre-wrap">
           {text || <span className="text-gray-300">（尚未產生）</span>}
@@ -432,6 +456,7 @@ function DraftFactcheckContent({
         <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1">
           <span className="material-symbols-outlined text-sm">link</span>
           佐證資料
+          <CopyButton value={references} />
         </label>
         <div className="w-full min-h-[8rem] p-3 text-sm font-mono text-gray-700 bg-white border border-gray-200 rounded-lg leading-relaxed whitespace-pre-wrap">
           {references || <span className="text-gray-300">（尚未產生）</span>}
