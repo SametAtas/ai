@@ -4,21 +4,23 @@ import type {
   AdkEvent,
   AdkSession,
   ChatMessage,
-  SourceItem,
+  ToolInvocation,
 } from './adk'
 
 export interface ChatSessionState {
   messages: Array<ChatMessage>
   isStreaming: boolean
   error: string | null
-  sources: Array<SourceItem>
+  toolInvocations: Record<string, ToolInvocation>
+  lastReplyDraftId: string | null
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
   messages: [],
   isStreaming: false,
   error: null,
-  sources: [],
+  toolInvocations: {},
+  lastReplyDraftId: null,
 }
 
 // Global registry of abort controllers per session to prevent duplicate streams
@@ -213,17 +215,50 @@ export function applyEventToState(
 
   // console.info('applyEventToState', event);
 
-  // Skip function responses
-  const eventParts = event.content.parts.filter(p => !p.functionResponse);
+  // Build toolInvocations from functionCall and functionResponse parts
+  const toolInvocations = { ...prev.toolInvocations }
+  let lastReplyDraftId = prev.lastReplyDraftId
+
+  for (const part of event.content.parts) {
+    if (part.functionCall?.id) {
+      const { id, name, args } = part.functionCall
+      if (id && name) {
+        toolInvocations[id] = {
+          ...toolInvocations[id],
+          id,
+          name,
+          args: (args ?? {}) as ToolInvocation['args'],
+          resp: toolInvocations[id]?.resp ?? null,
+        } as ToolInvocation
+        if (name === 'draft_factcheck_response') {
+          lastReplyDraftId = id
+        }
+      }
+    }
+    if (part.functionResponse) {
+      const key = part.functionResponse.id ?? part.functionResponse.name
+      if (key && toolInvocations[key]) {
+        toolInvocations[key] = {
+          ...toolInvocations[key],
+          resp: (part.functionResponse.response ?? null) as ToolInvocation['resp'],
+        } as ToolInvocation
+      }
+    }
+  }
+
+  // Exclude function response parts from chat messages
+  const eventParts = event.content.parts.filter(p => !p.functionResponse)
 
   if (event.content.role === 'user') {
-    // Don't insert user message if it's just a function response.
-    // We may store the map of function response as a separate map when we need tool response in UI.
-    if (eventParts.length === 0) return prev;
+    // Don't insert user message if it's just function responses
+    if (eventParts.length === 0) return { ...prev, toolInvocations, lastReplyDraftId }
 
     // event is user message, just append message
     return {
-      ...prev, messages: [
+      ...prev,
+      toolInvocations,
+      lastReplyDraftId,
+      messages: [
         ...prev.messages,
         {
           id: genId(),
@@ -232,7 +267,7 @@ export function applyEventToState(
           parts: [...eventParts],
           timestamp: new Date(),
         },
-      ]
+      ],
     }
   }
 
@@ -307,37 +342,7 @@ export function applyEventToState(
     }
   }
 
-  // Grounding metadata (Sources)
-  let sources = prev.sources;
-  if (event.groundingMetadata?.groundingChunks) {
-    const newSources: Array<SourceItem> =
-      event.groundingMetadata.groundingChunks
-        .filter((c) => c.web?.uri)
-        .map((c) => {
-          const url = c.web!.uri!
-          let domain = ''
-          try {
-            domain = new URL(url).hostname
-          } catch {
-            domain = url
-          }
-          return {
-            url,
-            title: c.web!.title ?? 'Unknown Source',
-            domain,
-            snippet: '',
-            adopted: false,
-          }
-        })
-
-    if (newSources.length > 0) {
-      const existingUrls = new Set(sources.map((s) => s.url))
-      const unique = newSources.filter((s) => !existingUrls.has(s.url))
-      sources = [...sources, ...unique]
-    }
-  }
-
-  return { ...prev, messages, sources }
+  return { ...prev, messages, toolInvocations, lastReplyDraftId }
 }
 
 /**

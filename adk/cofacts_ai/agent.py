@@ -26,6 +26,7 @@ from google.genai import types as genai_types
 
 from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
 from .tools import (
+    draft_factcheck_response,
     get_single_cofacts_article,
     resolve_vertex_redirect,
     search_cofacts_database,
@@ -599,19 +600,19 @@ ai_writer = LlmAgent(
        - Investigator summarizes pages and can err — verifier reads the originals directly.
        - Do not pass site names or descriptions; only real `https://` links.
 
-    6. **Source Evaluation**: Have political perspective agents review key sources and materials used
+    6. **Draft & Proofreader Review**:
+       - Write a draft reply in plain text (do NOT call the tool yet).
+       - Send the draft along with the cited sources to the political perspective agents and ask:
+         "Does this reply address your concerns? Is the tone neutral? Are the sources credible from your perspective?"
+       - Based on their feedback, revise the draft and re-send as needed.
+       - Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
 
     7. **Compose Reply**:
-       - Write the fact-check reply using only claims confirmed by verifier in step 5.
-       - Write fact-check reply following Cofacts format (separate text and references fields)
-       - Text field: Focus on clear explanation without URLs or citations
-       - References field: List all supporting sources separately
-       - Focus on persuading or kindly reminding people who share/receive such messages
-       - If factual statements are false, search for diverse opinions to offer readers
-
-    8. **Multi-Perspective Review**: Get comprehensive feedback from all political perspectives on the final reply
-
-    9. **Finalize**: Incorporate feedback and finalize the reply
+       - Before calling the tool, explain your classification choice and the key points of the reply in text.
+       - Call `draft_factcheck_response` — this is the goal of the whole process. See the tool's argument descriptions for all format requirements.
+       - Use only claims confirmed by verifier in step 5.
+       - Focus on persuading or kindly reminding people who share/receive such messages.
+       - After the tool returns success, ask the user to open the tool call result above to review the draft and share any feedback.
 
     **Flexible Support:**
     - Offer sub-agent capabilities as needed, not as a rigid sequence
@@ -619,49 +620,6 @@ ai_writer = LlmAgent(
     - Provide verification support when asked
     - Help organize and structure their insights
     - Assist with formatting and presentation
-
-    ## Cofacts Reply Format:
-
-    **Note**: Cofacts uses separate fields for content and sources, and does not support Markdown formatting.
-
-    Based on your analysis, classify the message as one of:
-    - **Contains true information** (含有正確訊息)
-    - **Contains misinformation** (含有錯誤訊息)
-    - **Contains personal perspective** (含有個人意見)
-
-    ### Format Structure:
-
-    **For "Contains true information" or "Contains misinformation":**
-
-    **Text Field (內文) - PLAIN TEXT ONLY:**
-    - Start with a brief opening paragraph that identifies which specific parts of the message are correct/incorrect/opinion-based
-    - Follow with detailed explanations in separate paragraphs
-    - Write a clear, self-contained explanation in plain text
-    - Use neutral, educational tone
-    - Use emojis at the start of paragraphs for better readability
-    - Do NOT use Markdown formatting
-    - Do NOT include URLs, links, or reference citations in this text
-
-    **References Field (出處):**
-    - **NO HALLUCINATION**: Only use URLs that have been explicitly provided by search results or verification.
-    - NEVER guess or invent a URL destination.
-    - List each source URL on a separate line
-    - Add a brief 1-line summary after each URL explaining its relevance
-
-    **For "Contains personal perspective":**
-
-    **Text Field (內文) - PLAIN TEXT ONLY:**
-    - Start with a brief opening paragraph that identifies which specific parts contain personal opinions vs. factual claims
-    - Follow with detailed explanations in separate paragraphs
-    - Remind readers that opinions are not factual statements
-    - Provide context about why this matters for public discourse
-    - Use emojis for paragraph separation
-    - Do NOT use Markdown formatting
-    - Do NOT include URLs or citations in this text
-
-    **Opinion Sources Field (意見出處):**
-    - URLs with 1-line summaries showing diverse perspectives
-    - Include sources representing different viewpoints when available
 
     ## How to Use Political Perspective Agents:
 
@@ -675,7 +633,7 @@ ai_writer = LlmAgent(
        - Provide the suspicious message.
        - Ask: "What questions/feelings does this evoke? What makes you angry or confused?"
 
-    2. **Reviewing the Reply** (Later):
+    2. **Reviewing the Reply** (Before Drafting):
        - Provide the suspicious message AND your draft reply.
        - Ask: "Does this reply answer your questions? Which doubts remain unresolved?"
 
@@ -686,6 +644,10 @@ ai_writer = LlmAgent(
     - Evaluate whether sources might seem biased to certain political viewpoints
     - Ensure final replies will be credible across political divides
     - Identify potential blind spots in analysis
+
+    ## Cofacts Reply Format:
+
+    Use `draft_factcheck_response` to submit the reply. All format rules are in that tool's argument descriptions.
 
     ## Quality Standards:
 
@@ -702,6 +664,7 @@ ai_writer = LlmAgent(
     tools=[
         search_cofacts_database,
         get_single_cofacts_article,
+        draft_factcheck_response,
         # submit_cofacts_reply
         AgentTool(agent=ai_investigator),
         AgentTool(agent=ai_verifier),

@@ -14,6 +14,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as AppSessionSessionIdRouteImport } from './routes/_app/session.$sessionId'
+import { Route as AppSessionSessionIdToolToolCallIdRouteImport } from './routes/_app/session.$sessionId.tool.$toolCallId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -39,32 +40,51 @@ const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
   path: '/session/$sessionId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSessionSessionIdToolToolCallIdRoute =
+  AppSessionSessionIdToolToolCallIdRouteImport.update({
+    id: '/tool/$toolCallId',
+    path: '/tool/$toolCallId',
+    getParentRoute: () => AppSessionSessionIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/api/run-sse': typeof ApiRunSseRoute
-  '/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesByTo {
   '/api/run-sse': typeof ApiRunSseRoute
   '/': typeof AppIndexRoute
-  '/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/api/run-sse': typeof ApiRunSseRoute
   '/_app/': typeof AppIndexRoute
-  '/_app/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/_app/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/_app/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/run-sse' | '/session/$sessionId' | '/api/auth/callback'
+  fullPaths:
+    | '/'
+    | '/api/run-sse'
+    | '/session/$sessionId'
+    | '/api/auth/callback'
+    | '/session/$sessionId/tool/$toolCallId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/run-sse' | '/' | '/session/$sessionId' | '/api/auth/callback'
+  to:
+    | '/api/run-sse'
+    | '/'
+    | '/session/$sessionId'
+    | '/api/auth/callback'
+    | '/session/$sessionId/tool/$toolCallId'
   id:
     | '__root__'
     | '/_app'
@@ -72,6 +92,7 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/session/$sessionId'
     | '/api/auth/callback'
+    | '/_app/session/$sessionId/tool/$toolCallId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -117,17 +138,36 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSessionSessionIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/session/$sessionId/tool/$toolCallId': {
+      id: '/_app/session/$sessionId/tool/$toolCallId'
+      path: '/tool/$toolCallId'
+      fullPath: '/session/$sessionId/tool/$toolCallId'
+      preLoaderRoute: typeof AppSessionSessionIdToolToolCallIdRouteImport
+      parentRoute: typeof AppSessionSessionIdRoute
+    }
   }
 }
 
+interface AppSessionSessionIdRouteChildren {
+  AppSessionSessionIdToolToolCallIdRoute: typeof AppSessionSessionIdToolToolCallIdRoute
+}
+
+const AppSessionSessionIdRouteChildren: AppSessionSessionIdRouteChildren = {
+  AppSessionSessionIdToolToolCallIdRoute:
+    AppSessionSessionIdToolToolCallIdRoute,
+}
+
+const AppSessionSessionIdRouteWithChildren =
+  AppSessionSessionIdRoute._addFileChildren(AppSessionSessionIdRouteChildren)
+
 interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
-  AppSessionSessionIdRoute: typeof AppSessionSessionIdRoute
+  AppSessionSessionIdRoute: typeof AppSessionSessionIdRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
-  AppSessionSessionIdRoute: AppSessionSessionIdRoute,
+  AppSessionSessionIdRoute: AppSessionSessionIdRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
