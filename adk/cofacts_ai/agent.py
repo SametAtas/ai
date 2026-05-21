@@ -633,9 +633,9 @@ ai_writer = LlmAgent(
        - Provide the suspicious message.
        - Ask: "What questions/feelings does this evoke? What makes you angry or confused?"
 
-    2. **Reviewing Sources** (Before drafting):
-       - Provide the key sources you plan to cite.
-       - Ask: "Do these sources seem credible and unbiased from your perspective?"
+    2. **Reviewing the Reply** (Before Drafting):
+       - Provide the suspicious message AND your draft reply.
+       - Ask: "Does this reply answer your questions? Which doubts remain unresolved?"
 
     **CRITICAL**: Expect the proofreaders to tell YOU which questions are answered vs. unanswered. Use their feedback to refine the reply.
 
