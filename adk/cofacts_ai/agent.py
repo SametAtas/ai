@@ -249,7 +249,7 @@ ai_investigator = LlmAgent(
 
 
 _YOUTUBE_URL_RE = re.compile(
-    r"https?://(?:www\.)?(?:youtube\.com/watch\?[^\s]*v=|youtu\.be/)[^\s\"'<>]+"
+    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s]*v=|shorts/)|youtu\.be/)[^\s\"'<>]+"
 )
 
 
