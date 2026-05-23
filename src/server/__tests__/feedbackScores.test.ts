@@ -59,7 +59,7 @@ describe('fetchFeedbackForTrace', () => {
     expect(calledUrl.searchParams.get('traceId')).toBe('trace-abc')
     expect(calledUrl.searchParams.get('name')).toBe('user-thumbs')
     expect(calledUrl.searchParams.get('userId')).toBe('user-42')
-    expect(calledUrl.searchParams.get('fields')).toBe('scores,trace')
+    expect(calledUrl.searchParams.get('fields')).toBe('score,trace')
     expect(calledUrl.searchParams.get('filter')).toBeNull()
     const auth = (init.headers as Record<string, string>).Authorization
     expect(auth).toBe(

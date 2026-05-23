@@ -60,7 +60,7 @@ export async function fetchFeedbackForTrace(
   // userId filters server-side by trace.userId; requires 'trace' in fields
   // per Langfuse v2 API contract.
   url.searchParams.set('userId', userId)
-  url.searchParams.set('fields', 'scores,trace')
+  url.searchParams.set('fields', 'score,trace')
   url.searchParams.set('limit', '50')
 
   const auth = Buffer.from(`${publicKey}:${secretKey}`).toString('base64')
