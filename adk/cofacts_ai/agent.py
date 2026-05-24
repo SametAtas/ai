@@ -208,46 +208,6 @@ async def save_search_widget(
     return None
 
 
-# AI Web Searcher - Google Search snippet reporter
-ai_investigator = LlmAgent(
-    name="investigator",
-    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
-    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
-    #
-    model="gemini-3-flash-preview",
-    description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources, grounding_supports} — sources lists reliable {title, url} pairs; grounding_supports maps content passages to source indices.",
-    generate_content_config=genai_types.GenerateContentConfig(
-        thinking_config=genai_types.ThinkingConfig(
-            thinking_level=genai_types.ThinkingLevel.MEDIUM
-        )
-    ),
-    after_model_callback=[append_grounding_sources, save_search_widget],
-    instruction="""
-    You are an AI Investigator for fact-checking. Search the web and faithfully report
-    what search results say — do not draw conclusions or form opinions.
-
-    ## CRITICAL RULE — No URLs in Your Text
-    Never include any URL, hyperlink, or web address in your response text.
-    All source links are extracted automatically from search results by the system.
-    Putting URLs in your text would show unverified links to fact-checkers — a serious quality issue.
-
-    ## Your Task
-
-    1. Search Google for information relevant to the claim or question
-    2. For each relevant result, report the page title and its content in detail:
-       include specific facts, numbers, dates, names, and direct claims from the source.
-       The writer needs concrete information — not high-level summaries.
-    3. Skip results that are not directly relevant
-
-    ## Key Principles
-    - Report faithfully; do not analyze, synthesize, or editorialize
-    - The writer draws conclusions — your job is to relay what sources say
-    - If sources disagree, report both sides; let the writer reconcile
-    """,
-    tools=[google_search],
-)
-
-
 _YOUTUBE_URL_RE = re.compile(
     r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s\"'<>]*v=|shorts/|live/|embed/|v/)|youtu\.be/)[^\s\"'<>]+"
 )
@@ -256,7 +216,7 @@ _YOUTUBE_URL_RE = re.compile(
 def inject_youtube_filedata(
     callback_context: CallbackContext, llm_request: Any
 ) -> None:
-    """Before-model callback for ai_verifier.
+    """Before-model callback for ai_investigator and ai_verifier.
 
     For each user message that contains YouTube URLs, appends FileData parts
     into the same parts array so Gemini can watch the videos inline.
@@ -280,6 +240,53 @@ def inject_youtube_filedata(
                     genai_types.Part(file_data=genai_types.FileData(file_uri=url))
                 )
     return None
+
+
+# AI Web Searcher - Google Search snippet reporter
+ai_investigator = LlmAgent(
+    name="investigator",
+    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
+    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
+    #
+    model="gemini-3-flash-preview",
+    description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources, grounding_supports} — sources lists reliable {title, url} pairs; grounding_supports maps content passages to source indices.",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.MEDIUM
+        )
+    ),
+    before_model_callback=inject_youtube_filedata,
+    after_model_callback=[append_grounding_sources, save_search_widget],
+    instruction="""
+    You are an AI Investigator for fact-checking. Search the web and faithfully report
+    what search results say — do not draw conclusions or form opinions.
+
+    ## CRITICAL RULE — No URLs in Your Text
+    Never include any URL, hyperlink, or web address in your response text.
+    All source links are extracted automatically from search results by the system.
+    Putting URLs in your text would show unverified links to fact-checkers — a serious quality issue.
+
+    ## Your Task
+
+    1. Search Google for information relevant to the claim or question
+    2. For each relevant result, report the page title and its content in detail:
+       include specific facts, numbers, dates, names, and direct claims from the source.
+       The writer needs concrete information — not high-level summaries.
+    3. Skip results that are not directly relevant
+
+    ## Key Principles
+    - Report faithfully; do not analyze, synthesize, or editorialize
+    - The writer draws conclusions — your job is to relay what sources say
+    - If sources disagree, report both sides; let the writer reconcile
+
+    ## When a YouTube video is in context
+    If a YouTube video has been loaded into this conversation, first describe what you directly
+    observe (who appears, what is said, visible text and logos). Do NOT infer identity, event name,
+    or date from training knowledge — only from what is visible or audible. Then search the web
+    for corroborating information.
+    """,
+    tools=[google_search],
+)
 
 
 # AI Verifier - Faithful passage reporter from URLs
@@ -327,9 +334,11 @@ ai_verifier = LlmAgent(
     or a person's full identity. If the video does not explicitly state it, write
     "影片未說明 / cannot be determined from this video."
 
-    **Video title and hashtags are not evidence**: The title, description, and hashtags of a YouTube
-    video are added by the uploader and may be inaccurate or intentionally misleading.
-    Do NOT treat them as evidence about the event depicted in the video.
+    **Two-layer reporting for video content**: Report uploader-provided metadata and directly
+    observed content as separate, clearly labelled layers:
+    - 「影片標題/描述（上傳者提供）」: quote verbatim — present as what the uploader wrote, not as confirmed fact
+    - 「影片可觀察內容」: what is visible/audible in the video — speech, on-screen text, logos, surroundings
+    The writer has broader context to judge whether the title is accurate or misleading.
 
     **No invented citations**: The Sources list MUST ONLY contain URLs that were provided as input.
     Never cite a news article, report, or webpage that was not in the original URL list —
