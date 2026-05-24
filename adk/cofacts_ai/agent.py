@@ -249,12 +249,12 @@ ai_investigator = LlmAgent(
 
 
 _YOUTUBE_URL_RE = re.compile(
-    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s]*v=|shorts/)|youtu\.be/)[^\s\"'<>]+"
+    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s\"'<>]*v=|shorts/|live/|embed/|v/)|youtu\.be/)[^\s\"'<>]+"
 )
 
 
 def inject_youtube_filedata(
-    callback_context: CallbackContext, llm_request
+    callback_context: CallbackContext, llm_request: Any
 ) -> None:
     """Before-model callback for ai_verifier.
 
