@@ -258,30 +258,25 @@ def inject_youtube_filedata(
 ) -> None:
     """Before-model callback for ai_verifier.
 
-    Scans the conversation contents for YouTube URLs and appends them as
-    FileData parts so Gemini can watch the videos. The original URLs are kept
-    intact so url_context still fetches their title/description metadata.
+    For each user message that contains YouTube URLs, appends FileData parts
+    into the same parts array so Gemini can watch the videos inline.
+    The original URLs are kept intact so url_context still fetches their
+    title/description metadata.
     """
-    youtube_urls = []
     for content in llm_request.contents:
-        if not content.parts:
+        if content.role != "user" or not content.parts:
             continue
+        youtube_urls = []
         for part in content.parts:
             if part.text:
                 youtube_urls.extend(_YOUTUBE_URL_RE.findall(part.text))
-
-    if not youtube_urls:
-        return None
-
-    llm_request.contents.append(
-        genai_types.Content(
-            role="user",
-            parts=[
-                genai_types.Part(file_data=genai_types.FileData(file_uri=url))
-                for url in dict.fromkeys(youtube_urls)  # deduplicate, preserve order
-            ],
-        )
-    )
+        seen = set()
+        for url in youtube_urls:
+            if url not in seen:
+                seen.add(url)
+                content.parts.append(
+                    genai_types.Part(file_data=genai_types.FileData(file_uri=url))
+                )
     return None
 
 
