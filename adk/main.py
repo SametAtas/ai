@@ -12,9 +12,7 @@ load_dotenv(os.path.join(_agents_dir, "cofacts_ai", ".env"))
 
 app = get_fast_api_app(
     agents_dir=_agents_dir,
-    session_service_uri=os.environ.get(
-        "DATABASE_URL", "sqlite+aiosqlite:////tmp/sessions.db"
-    ),
+    session_service_uri=os.environ.get("DATABASE_URL"),
     web=False,
 )
 
