@@ -55,6 +55,8 @@ spec:
           value: "https://langfuse.cofacts.tw"
         - name: DATABASE_URL
           value: "${DATABASE_URL}"
+        - name: COFACTS_API_URL
+          value: "${COFACTS_API_URL}"
         startupProbe:
           tcpSocket:
             port: 8000
