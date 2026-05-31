@@ -1,12 +1,14 @@
 import os
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import Request
 from google.adk.cli.fast_api import get_fast_api_app
 
 from cofacts_ai.auth_context import cofacts_token_var
 
 _agents_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_agents_dir, "cofacts_ai", ".env"))
 
 app = get_fast_api_app(
     agents_dir=_agents_dir,
