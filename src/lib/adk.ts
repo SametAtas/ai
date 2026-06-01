@@ -59,10 +59,6 @@ export type AllTools = {
       | {
           content: string
           sources: Array<ToolSource>
-          grounding_supports: Array<{
-            segment: { start_index: number; end_index: number; text: string }
-            source_ids: number[]
-          }>
         }
       | AdkFallbackResp
   }

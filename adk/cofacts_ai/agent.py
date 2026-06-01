@@ -81,9 +81,8 @@ async def append_grounding_sources(
     """
     After-model callback for ai_investigator.
 
-    Transforms the raw LLM response into structured JSON {content, sources, grounding_supports}:
+    Transforms the raw LLM response into structured JSON {content, sources}:
     - Resolves grounding chunk redirect URLs in parallel; builds sources[] (1:1 with chunks)
-    - Preserves Gemini's grounding_supports segment positions for frontend visualization
     - If grounding metadata is missing (intermittent), injects a retry instruction for the writer
     - If response was blocked by copyright filter (RECITATION), injects a retry with different terms
     """
@@ -119,34 +118,11 @@ async def append_grounding_sources(
     # ── B: Build content from all text parts ─────────────────────────────────
     content = "".join(p.text or "" for p in llm_response.content.parts)
 
-    # ── C: Build grounding_supports preserving Gemini segment positions ──────
-    grounding_supports = []
-    seen_texts: set[str] = set()
-    for support in metadata.grounding_supports or []:
-        seg = support.segment
-        if not seg or not seg.text:
-            continue
-        if seg.text in seen_texts:
-            continue
-        seen_texts.add(seg.text)
-        src_ids = sorted(set(support.grounding_chunk_indices or []))
-        grounding_supports.append(
-            {
-                "segment": {
-                    "start_index": seg.start_index,
-                    "end_index": seg.end_index,
-                    "text": seg.text,
-                },
-                "source_ids": src_ids,
-            }
-        )
-
     # ── Write back as JSON so writer's after_tool_callback gets structured output
     serialized = json.dumps(
         {
             "content": content,
             "sources": sources_list,
-            "grounding_supports": grounding_supports,
         },
         ensure_ascii=False,
     )
@@ -160,9 +136,8 @@ async def append_url_context_sources(
     After-model callback for ai_verifier.
 
     Captures clean URL-title pairs from url_context grounding_chunks and wraps
-    the response as {content, sources} JSON. Intentionally omits grounding_supports
-    (too scattered for url_context). url_context returns real URLs directly —
-    no redirect resolution or hallucination stripping needed.
+    the response as {content, sources} JSON. url_context returns real URLs
+    directly — no redirect resolution or hallucination stripping needed.
     """
     if not llm_response.grounding_metadata:
         return None
@@ -256,7 +231,7 @@ ai_investigator = LlmAgent(
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
     #
     model="gemini-3-flash-preview",
-    description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources, grounding_supports} — sources lists reliable {title, url} pairs; grounding_supports maps content passages to source indices.",
+    description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources} — sources lists reliable {title, url} pairs.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.MEDIUM
@@ -676,9 +651,8 @@ ai_writer = LlmAgent(
        - Describe what you want to know; investigator searches the web and reports findings with sources.
        - **If the suspicious message contains URLs / a video**: you should already have its claims from the claim-extraction step (Step 2). Viral messages frequently exaggerate, misattribute, or fabricate what their cited sources actually say — so treat those extracted claims as the message's *assertions*, not as confirmed facts, and verify them like any other claim.
        - **NO HALLUCINATION**: NEVER guess or invent a URL. Use only URLs from `sources[].url` returned by agents.
-       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator` returns `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
-         `sources` is a list of `{{"title": "...", "url": "..."}}` — the ONLY reliable URLs.
-         `grounding_supports` loosely associates passages of `content` with indices into `sources[]`. Treat it ONLY as a hint for which URLs *might* support a passage — it is NOT proof. Google's grounding routinely OVER-ATTRIBUTES: a single sentence is often tagged with many sources (we have seen 4–9), most of which do not actually contain that statement. So never cite a URL just because `grounding_supports` links it to a passage; use the hint only to choose which URLs to send to `verifier`, and let `verifier` (which reads the page) decide what each source really supports.
+       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator` returns `{{"content": "...", "sources": [...]}}`.
+         `sources` is a list of `{{"title": "...", "url": "..."}}` — the search results it found, and the ONLY reliable URLs. Treat them as CANDIDATES only: the `content` does not tell you which source actually backs which statement, so send the relevant `sources` URLs to `verifier` and let it (which reads each page) decide what each one really supports. Never cite a URL just because it appears in `sources`.
          Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
        - **VERIFIER RESPONSE SCHEMA**: `verifier` returns `{{"content": "...", "sources": [...]}}`.
          `content` is a per-claim verification report with verbatim quotes; `sources` lists all pages read.
