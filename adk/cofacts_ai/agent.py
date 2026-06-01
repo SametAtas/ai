@@ -678,7 +678,7 @@ ai_writer = LlmAgent(
        - **NO HALLUCINATION**: NEVER guess or invent a URL. Use only URLs from `sources[].url` returned by agents.
        - **INVESTIGATOR RESPONSE SCHEMA**: `investigator` returns `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
          `sources` is a list of `{{"title": "...", "url": "..."}}` — the ONLY reliable URLs.
-         `grounding_supports` maps passages of `content` (by character offset) to indices into `sources[]`: this is how you know WHICH source backs WHICH statement — use it, do not guess the mapping. If a passage you want to cite has no `grounding_supports` entry, treat it as unsourced and send it to `verifier` before relying on it.
+         `grounding_supports` loosely associates passages of `content` with indices into `sources[]`. Treat it ONLY as a hint for which URLs *might* support a passage — it is NOT proof. Google's grounding routinely OVER-ATTRIBUTES: a single sentence is often tagged with many sources (we have seen 4–9), most of which do not actually contain that statement. So never cite a URL just because `grounding_supports` links it to a passage; use the hint only to choose which URLs to send to `verifier`, and let `verifier` (which reads the page) decide what each source really supports.
          Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
        - **VERIFIER RESPONSE SCHEMA**: `verifier` returns `{{"content": "...", "sources": [...]}}`.
          `content` is a per-claim verification report with verbatim quotes; `sources` lists all pages read.
