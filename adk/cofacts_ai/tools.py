@@ -488,6 +488,16 @@ def draft_factcheck_response(
                 ),
             }
 
+        # The leading token of each non-empty references line is the URL
+        # ("URL one-line-summary"); match against that set rather than a
+        # substring of the whole string (a short URL can be a substring of a
+        # longer listed one).
+        reference_urls = {
+            line.split(None, 1)[0]
+            for line in (ln.strip() for ln in references.splitlines())
+            if line
+        }
+
         malformed = []
         unconfirmed = []
         not_in_references = []
@@ -502,7 +512,7 @@ def draft_factcheck_response(
                 continue
             if entry.get("verifier_confirmed") is not True:
                 unconfirmed.append(claim)
-            if url not in references:
+            if url not in reference_urls:
                 not_in_references.append(url)
 
         if malformed:
