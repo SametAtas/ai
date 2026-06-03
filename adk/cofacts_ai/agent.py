@@ -15,7 +15,6 @@ import re
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
@@ -594,14 +593,10 @@ async def inject_article_attachment(
         attachment_url = article.get("attachmentUrl")
         if not attachment_url or article_type not in _ARTICLE_TYPE_MIME:
             continue
-        parsed = urlparse(attachment_url)
-        if parsed.netloc != "storage.googleapis.com":
-            continue
-        gs_uri = "gs:/" + parsed.path
         content.parts = list(content.parts) + [
             genai_types.Part(
                 file_data=genai_types.FileData(
-                    file_uri=gs_uri,
+                    file_uri=attachment_url,
                     mime_type=_ARTICLE_TYPE_MIME[article_type],
                 )
             )
