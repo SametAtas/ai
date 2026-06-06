@@ -128,7 +128,10 @@ jobs:
 
       - name: Generate Service YAML
         env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          # Vertex AI project for Gemini. Defaults to the deploy project; set a
+          # GOOGLE_CLOUD_PROJECT secret to override (it must have Vertex AI access
+          # and read access to the cofacts-media-collection bucket).
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT || secrets.GC_PROJECT_ID }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
           # Cofacts.ai's PostgreSQL connection string
@@ -140,7 +143,7 @@ jobs:
           GC_PROJECT_ID: ${{ secrets.GC_PROJECT_ID }}
           COFACTS_API_URL: ${{ secrets.COFACTS_API_URL }}
         run: |
-          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_API_KEY} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${DATABASE_URL} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL}' < service.template.yaml > service.yaml
+          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_CLOUD_PROJECT} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${DATABASE_URL} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL}' < service.template.yaml > service.yaml
           cat service.yaml
 
       - name: Deploy to Cloud Run

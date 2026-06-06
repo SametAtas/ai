@@ -27,7 +27,11 @@ from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.base_tool import BaseTool
 from google.genai import types as genai_types
 
-from .gcs_signing import inject_article_attachment
+from .gcs_signing import (
+    inject_article_attachment,
+    inject_cofacts_media_filedata,
+    signed_url_to_gs,
+)
 from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
 from .tools import (
     draft_factcheck_response,
@@ -285,18 +289,23 @@ ai_verifier = LlmAgent(
             thinking_level=genai_types.ThinkingLevel.HIGH
         )
     ),
-    before_model_callback=inject_youtube_filedata,
+    before_model_callback=[inject_youtube_filedata, inject_cofacts_media_filedata],
     after_model_callback=append_url_context_sources,
     instruction="""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
 
     ## Your Task
-    1. Call url_context for ALL provided URLs in one call (up to 20) — this is MANDATORY, even for video URLs.
-       url_context fetches web PAGE metadata (title, publish date, description) from the HTML.
+    1. Call url_context for ALL provided web/news/YouTube page URLs in one call (up to 20) —
+       this is MANDATORY. url_context fetches web PAGE metadata (title, publish date,
+       description) from the HTML.
        For video URLs like YouTube, page metadata and video frames are complementary:
        - url_context → upload date, uploader name, page title/description
        - FileData → observable video content (speech, visuals, on-screen text)
+       EXCEPTION — Cofacts media URLs (gs:// or storage.googleapis.com/cofacts-media-collection):
+       do NOT call url_context on these. They are raw storage objects with no web page to fetch;
+       the media itself is delivered directly to you as watchable/inspectable FileData. Just
+       observe it and report its content.
     2. For each claim, assess whether each URL's content directly supports it
     3. Write a verification report
 
@@ -542,8 +551,22 @@ async def after_tool(
     tool_context: CallbackContext,
     tool_response: Any,
 ) -> Optional[Any]:
-    """Deserializes the JSON response from investigator/verifier into a dict so
-    the writer LLM receives structured output."""
+    """After-tool callback for ai_writer.
+
+    - get_single_cofacts_article: rewrite the article's signed HTTPS attachmentUrl
+      to a gs:// URI so the writer (and anything it forwards to the verifier) only
+      ever sees the non-expiring, Vertex-native gs:// form — never a signed URL.
+    - investigator/verifier: deserialize the JSON response into a dict so the
+      writer LLM receives structured output.
+    """
+    if tool.name == "get_single_cofacts_article":
+        if isinstance(tool_response, dict):
+            article = tool_response.get("article")
+            if isinstance(article, dict):
+                url = article.get("attachmentUrl")
+                if url:
+                    article["attachmentUrl"] = signed_url_to_gs(url) or url
+        return tool_response
     if tool.name not in ("investigator", "verifier"):
         return None
     if not isinstance(tool_response, str):

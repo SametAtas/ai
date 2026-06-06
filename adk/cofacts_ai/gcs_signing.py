@@ -1,20 +1,19 @@
 """
-GCS attachment signing utilities for Cofacts AI.
+Cofacts media utilities for Gemini on Vertex AI.
 
-Handles re-signing expired GCS signed URLs and injecting article attachments
-as FileData parts into LLM requests so Gemini can perceive media directly.
+Converts Cofacts article media URLs (signed GCS HTTPS) to ``gs://`` URIs and
+injects them as ``FileData`` parts so Gemini can perceive the media directly.
+On Vertex AI ``file_data.file_uri`` accepts ``gs://`` URIs natively (and HTTP
+URLs are capped at ~15MB, which our media exceeds), so we hand Gemini the
+``gs://`` form and let the runtime service account read the bucket — no signed
+URLs and no on-demand re-signing required.
 """
 
-import asyncio
 import logging
-import os
-from datetime import datetime, timedelta, timezone
+import re
 from typing import Optional
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import unquote, urlparse
 
-import google.auth
-import google.auth.transport.requests
-from google.cloud import storage
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
@@ -27,53 +26,22 @@ _ARTICLE_TYPE_MIME = {
     "AUDIO": "audio/mpeg",
 }
 
-# Re-sign a stored attachment URL when it expires within this many minutes, and
-# mint the replacement to live this long. Fresh URLs straight from rumors-api are
-# well within the margin, so re-signing only kicks in for URLs replayed from an
-# older conversation's history (a reopened session, a slow multi-turn run).
-_RESIGN_MARGIN_MINUTES = 5
-_RESIGN_TTL_MINUTES = 60
-
-# OAuth scopes for reading the Cofacts media bucket and signing object URLs.
-_GCS_SCOPES = [
-    "https://www.googleapis.com/auth/devstorage.read_only",
-    "https://www.googleapis.com/auth/cloud-platform",
-]
-
-_gcs_credentials = None
-_gcs_credentials_lock = asyncio.Lock()
-
-
-async def _get_gcs_credentials():
-    """Application Default Credentials with GCS scope, refreshed on demand.
-
-    Works both on Cloud Run (runtime service account via the metadata server) and
-    in docker-compose/local (service-account JSON via GOOGLE_APPLICATION_CREDENTIALS,
-    which also carries the private key needed to sign URLs offline). google.auth and
-    credential refresh do blocking network I/O, so they run in a worker thread; the
-    lock serializes init/refresh of the shared credentials object.
-    """
-    global _gcs_credentials
-    async with _gcs_credentials_lock:
-        if _gcs_credentials is None:
-
-            def _load_creds():
-                creds, _ = google.auth.default(scopes=_GCS_SCOPES)
-                return creds
-
-            _gcs_credentials = await asyncio.to_thread(_load_creds)
-        if not _gcs_credentials.valid:
-            await asyncio.to_thread(
-                _gcs_credentials.refresh, google.auth.transport.requests.Request()
-            )
-    return _gcs_credentials
+# Matches a Cofacts media reference in free text — a gs:// URI or a GCS HTTPS
+# URL (signed or not) for the cofacts-media-collection bucket. Used to spot the
+# media URL the writer forwards to the verifier in a plain-text instruction.
+_COFACTS_MEDIA_URL_RE = re.compile(
+    r"gs://cofacts-media-collection/[^\s\"'<>]+"
+    r"|https?://(?:storage\.googleapis\.com/cofacts-media-collection"
+    r"|cofacts-media-collection\.storage\.googleapis\.com)/[^\s\"'<>]+"
+)
 
 
 def _parse_gcs_https_url(url: str) -> Optional[tuple[str, str]]:
     """Return (bucket, blob) from a GCS HTTPS URL, or None if unrecognized.
 
     Handles both path-style (storage.googleapis.com/<bucket>/<object>) and
-    virtual-hosted style (<bucket>.storage.googleapis.com/<object>).
+    virtual-hosted style (<bucket>.storage.googleapis.com/<object>). The query
+    string (e.g. a V4 signature) is ignored, so signed URLs convert cleanly.
     """
     parsed = urlparse(url)
     host = parsed.hostname or ""
@@ -87,85 +55,50 @@ def _parse_gcs_https_url(url: str) -> Optional[tuple[str, str]]:
     return None
 
 
-def _signed_url_expiry(url: str) -> Optional[datetime]:
-    """Return the UTC expiry of a GCS signed URL, or None if it is not signed.
+def signed_url_to_gs(url: str) -> Optional[str]:
+    """Convert a GCS HTTPS URL (signed or not) to a ``gs://`` URI.
 
-    Supports V4 (X-Goog-Date + X-Goog-Expires seconds) and the legacy V2 form
-    (Expires = absolute unix timestamp).
+    Returns None if the URL is not a recognized GCS HTTPS URL — including when it
+    is already a ``gs://`` URI — so callers can fall back to the original value.
     """
-    q = parse_qs(urlparse(url).query)
-    if "X-Goog-Date" in q and "X-Goog-Expires" in q:
-        try:
-            start = datetime.strptime(q["X-Goog-Date"][0], "%Y%m%dT%H%M%SZ").replace(
-                tzinfo=timezone.utc
-            )
-            return start + timedelta(seconds=int(q["X-Goog-Expires"][0]))
-        except (ValueError, KeyError):
-            return None
-    if "Expires" in q:
-        try:
-            return datetime.fromtimestamp(int(q["Expires"][0]), tz=timezone.utc)
-        except (ValueError, KeyError):
-            return None
-    return None
+    parsed = _parse_gcs_https_url(url)
+    if not parsed:
+        return None
+    bucket, blob = parsed
+    return f"gs://{bucket}/{blob}"
 
 
-async def _resign_gcs_blob(bucket_name: str, blob_name: str) -> Optional[str]:
-    """Mint a fresh V4 signed GET URL for a GCS object using GCS credentials."""
-    creds = await _get_gcs_credentials()
+def _mime_for_media_uri(uri: str) -> str:
+    """Infer a coarse MIME type from a Cofacts media path (.../video|image|audio/...).
 
-    def _sign() -> str:
-        project = getattr(creds, "project_id", None) or os.environ.get(
-            "GOOGLE_CLOUD_PROJECT"
-        )
-        client = storage.Client(credentials=creds, project=project)
-        blob = client.bucket(bucket_name).blob(blob_name)
-        return blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(minutes=_RESIGN_TTL_MINUTES),
-            method="GET",
-        )
-
-    return await asyncio.to_thread(_sign)
-
-
-async def _refresh_attachment_url(url: str) -> str:
-    """Return a still-valid signed URL for the attachment.
-
-    If the stored URL is unsigned/unrecognized or still valid beyond the margin,
-    it is returned unchanged. If it is expired (or about to), re-sign it using the
-    bucket and blob extracted from the URL. On any signing failure, fall back to the original URL
-    (best effort) so the turn never crashes.
+    Cofacts objects live under a type segment, e.g.
+    gs://cofacts-media-collection/production/video/<id>/original. The verifier
+    only sees the URL (not the articleType), so we read the type from the path
+    and default to video when it cannot be determined.
     """
-    expiry = _signed_url_expiry(url)
-    if expiry is None:
-        return url
-    if expiry - datetime.now(timezone.utc) > timedelta(minutes=_RESIGN_MARGIN_MINUTES):
-        return url
-    bucket_blob = _parse_gcs_https_url(url)
-    if not bucket_blob:
-        return url
-    try:
-        fresh = await _resign_gcs_blob(*bucket_blob)
-    except Exception:
-        logger.exception("Failed to re-sign expired attachment URL; using original")
-        return url
-    return fresh or url
+    path = urlparse(uri).path.lower()
+    if "/image/" in path:
+        return _ARTICLE_TYPE_MIME["IMAGE"]
+    if "/audio/" in path:
+        return _ARTICLE_TYPE_MIME["AUDIO"]
+    return _ARTICLE_TYPE_MIME["VIDEO"]
 
 
 async def inject_article_attachment(
     callback_context: CallbackContext,
     llm_request: LlmRequest,
 ) -> None:
-    """Inject media file_data into the content alongside the get_single_cofacts_article FunctionResponse.
+    """Before-model callback for ai_writer.
 
-    Appends a Part(file_data=...) sibling carrying the article's signed GCS HTTPS
-    attachmentUrl so Gemini can perceive the media directly. FunctionResponse.parts
-    is a Python SDK-only field not transmitted to the model; the file_data must live
-    at the content.parts level to be seen by the LLM.
+    Injects a Part(file_data=...) sibling carrying the article's media as a
+    ``gs://`` URI alongside the get_single_cofacts_article FunctionResponse so
+    Gemini can perceive the media directly. FunctionResponse.parts is a Python
+    SDK-only field not transmitted to the model; the file_data must live at the
+    content.parts level to be seen by the LLM.
 
-    The attachmentUrl stored in history can expire (reopened session, long run), so
-    it is re-signed on demand before injection — see _refresh_attachment_url.
+    after_tool already rewrites the writer-visible attachmentUrl to gs://, so the
+    stored value is normally a gs:// URI; signed_url_to_gs(...) returns None for a
+    gs:// value and we fall back to it unchanged.
     """
     for content in llm_request.contents:
         if content.role != "user":
@@ -189,11 +122,11 @@ async def inject_article_attachment(
         attachment_url = article.get("attachmentUrl")
         if not attachment_url or article_type not in _ARTICLE_TYPE_MIME:
             continue
-        attachment_url = await _refresh_attachment_url(attachment_url)
+        gs_uri = signed_url_to_gs(attachment_url) or attachment_url
         content.parts = list(content.parts) + [
             genai_types.Part(
                 file_data=genai_types.FileData(
-                    file_uri=attachment_url,
+                    file_uri=gs_uri,
                     # Coarse MIME type derived from articleType enum; the actual
                     # subtype (e.g. image/jpeg vs image/webp) may differ, but
                     # Gemini is permissive enough to handle the mismatch.
@@ -201,3 +134,44 @@ async def inject_article_attachment(
                 )
             )
         ]
+
+
+def inject_cofacts_media_filedata(
+    callback_context: CallbackContext, llm_request: LlmRequest
+) -> None:
+    """Before-model callback for ai_verifier.
+
+    The writer delegates media-watching by passing the verifier a Cofacts media
+    URL in a plain-text instruction. url_context cannot read a raw storage object,
+    so without this the verifier never actually sees the media. Here we detect the
+    Cofacts media URL in the message text and append it as a ``gs://`` FileData
+    Part so Gemini (on Vertex) can watch/inspect it directly — mirroring
+    inject_youtube_filedata for YouTube URLs.
+    """
+    try:
+        seen = set()
+        for content in llm_request.contents:
+            if content.role != "user" or not content.parts:
+                continue
+            urls = []
+            for part in content.parts:
+                if part.text:
+                    urls.extend(_COFACTS_MEDIA_URL_RE.findall(part.text))
+            for url in urls:
+                gs_uri = url if url.startswith("gs://") else signed_url_to_gs(url)
+                if not gs_uri or gs_uri in seen:
+                    continue
+                seen.add(gs_uri)
+                content.parts.append(
+                    genai_types.Part(
+                        file_data=genai_types.FileData(
+                            file_uri=gs_uri,
+                            mime_type=_mime_for_media_uri(gs_uri),
+                        )
+                    )
+                )
+    except Exception:
+        logger.exception(
+            "inject_cofacts_media_filedata failed; skipping media injection"
+        )
+    return None
