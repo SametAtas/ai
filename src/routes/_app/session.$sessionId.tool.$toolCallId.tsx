@@ -3,9 +3,7 @@ import { useCallback } from 'react'
 import { useChat } from '@/hooks/useChat'
 import { RightDrawer } from '@/components/RightDrawer'
 
-export const Route = createFileRoute(
-  '/_app/session/$sessionId/tool/$toolCallId',
-)({
+export const Route = createFileRoute('/_app/session/$sessionId/tool/$toolCallId')({
   component: ToolDrawer,
 })
 
@@ -26,7 +24,5 @@ function ToolDrawer() {
 
   const invocation = toolInvocations[toolCallId] ?? null
 
-  return (
-    <RightDrawer isOpen={true} onClose={handleClose} invocation={invocation} />
-  )
+  return <RightDrawer isOpen={true} onClose={handleClose} invocation={invocation} />
 }
