@@ -298,8 +298,14 @@ async def search_cofacts_database(
         if "error" in result:
             return result
 
-        # Extract ListArticles data from the successful response
-        return {"data": result["data"]["ListArticles"]}
+        list_articles = result["data"]["ListArticles"]
+        for edge in list_articles.get("edges") or []:
+            article = (edge.get("node") or {})
+            url = article.get("attachmentUrl")
+            if url:
+                article["attachmentUrl"] = signed_url_to_gs(url) or url
+
+        return {"data": list_articles}
 
     except Exception as e:
         return {
