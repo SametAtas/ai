@@ -120,39 +120,49 @@ async def inject_article_attachment(
     gs:// value and we fall back to it unchanged.
     """
     for content in llm_request.contents:
-        if content.role != "user":
+        if content.role != "user" or not content.parts:
             continue
 
-        if any(p.file_data for p in content.parts or []):
-            continue
+        # Media already attached to this content, keyed by URI, so re-running the
+        # callback on a later turn never injects a duplicate of the same object.
+        seen = {
+            p.file_data.file_uri
+            for p in content.parts
+            if p.file_data and p.file_data.file_uri
+        }
 
-        article_fr = None
-        for part in content.parts or []:
+        # Collect the parts to add and append them after the scan, rather than
+        # mutating content.parts mid-iteration. A single user turn can carry more
+        # than one get_single_cofacts_article response (the user may paste several
+        # article URLs at once), so handle every article response, not just the first.
+        new_parts = []
+        for part in content.parts:
             fr = part.function_response
-            if fr and fr.name == "get_single_cofacts_article":
-                article_fr = fr
-                break
-
-        if article_fr is None:
-            continue
-
-        article = (article_fr.response or {}).get("article") or {}
-        article_type = article.get("articleType")
-        attachment_url = article.get("attachmentUrl")
-        if not attachment_url or article_type not in _WRITER_INJECTED_TYPES:
-            continue
-        gs_uri = signed_url_to_gs(attachment_url) or attachment_url
-        content.parts = list(content.parts) + [
-            genai_types.Part(
-                file_data=genai_types.FileData(
-                    file_uri=gs_uri,
-                    # Coarse MIME type derived from articleType enum; the actual
-                    # subtype (e.g. image/jpeg vs image/webp) may differ, but
-                    # Gemini is permissive enough to handle the mismatch.
-                    mime_type=_ARTICLE_TYPE_MIME[article_type],
+            if not fr or fr.name != "get_single_cofacts_article":
+                continue
+            article = (fr.response or {}).get("article") or {}
+            article_type = article.get("articleType")
+            attachment_url = article.get("attachmentUrl")
+            if not attachment_url or article_type not in _WRITER_INJECTED_TYPES:
+                continue
+            gs_uri = signed_url_to_gs(attachment_url) or attachment_url
+            if gs_uri in seen:
+                continue
+            seen.add(gs_uri)
+            new_parts.append(
+                genai_types.Part(
+                    file_data=genai_types.FileData(
+                        file_uri=gs_uri,
+                        # Coarse MIME type derived from articleType enum; the actual
+                        # subtype (e.g. image/jpeg vs image/webp) may differ, but
+                        # Gemini is permissive enough to handle the mismatch.
+                        mime_type=_ARTICLE_TYPE_MIME[article_type],
+                    )
                 )
             )
-        ]
+
+        if new_parts:
+            content.parts = list(content.parts) + new_parts
 
 
 def inject_cofacts_media_filedata(
