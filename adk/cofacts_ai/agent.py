@@ -30,7 +30,6 @@ from google.genai import types as genai_types
 from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
-    signed_url_to_gs,
 )
 from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
 from .tools import (
@@ -568,20 +567,14 @@ async def after_tool(
 ) -> Optional[Any]:
     """After-tool callback for ai_writer.
 
-    - get_single_cofacts_article: rewrite the article's signed HTTPS attachmentUrl
-      to a gs:// URI so the writer (and anything it forwards to the verifier) only
-      ever sees the non-expiring, Vertex-native gs:// form — never a signed URL.
-    - investigator/verifier: deserialize the JSON response into a dict so the
-      writer LLM receives structured output.
+    investigator/verifier return their {content, sources} payload as a JSON
+    string; deserialize it into a dict so the writer LLM receives structured
+    output. This must happen in a callback because investigator/verifier are
+    AgentTools whose return value we cannot otherwise post-process.
+
+    (The article attachmentUrl -> gs:// rewrite lives in get_single_cofacts_article
+    itself, a tool we own and control directly.)
     """
-    if tool.name == "get_single_cofacts_article":
-        if isinstance(tool_response, dict):
-            article = tool_response.get("article")
-            if isinstance(article, dict):
-                url = article.get("attachmentUrl")
-                if url:
-                    article["attachmentUrl"] = signed_url_to_gs(url) or url
-        return tool_response
     if tool.name not in ("investigator", "verifier"):
         return None
     if not isinstance(tool_response, str):

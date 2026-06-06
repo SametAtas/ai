@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from .auth_context import cofacts_token_var
+from .media_filedata import signed_url_to_gs
 
 # GraphQL fragment for common Article fields
 COMMON_ARTICLE_FIELDS = """
@@ -352,6 +353,15 @@ async def get_single_cofacts_article(
                 "error": f"Article not found",
                 "article_id": article_id,
             }
+
+        # Rewrite the signed HTTPS attachmentUrl to a non-expiring, Vertex-native
+        # gs:// URI here, in the tool we control, so every consumer (the writer
+        # and anything it forwards to the verifier) only ever sees the gs:// form.
+        # signed_url_to_gs returns None for a value that is not a GCS HTTPS URL
+        # (e.g. already gs://), in which case we keep the original unchanged.
+        attachment_url = article.get("attachmentUrl")
+        if attachment_url:
+            article["attachmentUrl"] = signed_url_to_gs(attachment_url) or attachment_url
 
         return {
             "article_id": article_id,
