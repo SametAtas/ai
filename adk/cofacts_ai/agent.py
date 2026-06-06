@@ -27,7 +27,7 @@ from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.base_tool import BaseTool
 from google.genai import types as genai_types
 
-from .gcs_signing import (
+from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
     signed_url_to_gs,
