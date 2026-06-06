@@ -16,10 +16,10 @@ export function useSearchWidget(
 ) {
   const { data } = useQuery({
     queryKey: ['search-widget', sessionId, toolCallId],
-    queryFn: () =>
-      getSearchWidget({
-        data: { sessionId: sessionId!, toolCallId: toolCallId! },
-      }),
+    queryFn: () => {
+      if (!sessionId || !toolCallId) return null
+      return getSearchWidget({ data: { sessionId, toolCallId } })
+    },
     enabled: enabled && !!sessionId && !!toolCallId,
     staleTime: Infinity,
     gcTime: Infinity,

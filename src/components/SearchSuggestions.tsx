@@ -22,6 +22,14 @@ export function SearchSuggestions({
     const host = hostRef.current
     if (!host) return
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
+    // SECURITY — trusted content, intentionally rendered via innerHTML (no sanitization):
+    // `html` is Gemini's grounding `searchEntryPoint.renderedContent`, a first-party
+    // Google payload (styled chips + a `<style>` block). It never contains user input —
+    // it travels Gemini API -> our backend artifact -> here, with no untrusted source on
+    // the path — and Google's docs prescribe rendering it directly. Any query text inside
+    // the chips is HTML-escaped by Google. Note `innerHTML` does not execute injected
+    // `<script>` tags. Do NOT run this through a sanitizer like DOMPurify: it would strip
+    // the `<style>`/markup the widget needs and break the pills.
     shadow.innerHTML = html
     for (const anchor of Array.from(shadow.querySelectorAll('a'))) {
       anchor.setAttribute('target', '_blank')
