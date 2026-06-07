@@ -23,6 +23,9 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   lastReplyDraftId: null,
 }
 
+export const chatCacheKey = (sessionId: string) => ['chat', sessionId] as const
+export const CHAT_CACHE_KEY_PREFIX = ['chat'] as const
+
 // Global registry of abort controllers per session to prevent duplicate streams
 export const abortControllers = new Map<string, AbortController>()
 
@@ -47,7 +50,7 @@ export async function startChatStream({
   sessionId,
   payload = {},
 }: StartStreamOptions) {
-  const queryKey = ['chat', sessionId]
+  const queryKey = chatCacheKey(sessionId)
 
   // Abort any existing stream for this session
   abortControllers.get(sessionId)?.abort()
@@ -166,7 +169,7 @@ export function sendChatMessage(
   sessionId: string,
   text: string,
 ) {
-  const queryKey = ['chat', sessionId]
+  const queryKey = chatCacheKey(sessionId)
 
   if (!queryClient.getQueryData(queryKey)) {
     queryClient.setQueryData(queryKey, INITIAL_CHAT_STATE)
@@ -373,7 +376,7 @@ function processEventIntoCache(
   sessionId: string,
   event: AdkEvent,
 ) {
-  queryClient.setQueryData<ChatSessionState>(['chat', sessionId], (prev) => {
+  queryClient.setQueryData<ChatSessionState>(chatCacheKey(sessionId), (prev) => {
     if (!prev) return INITIAL_CHAT_STATE
     return applyEventToState(prev, event)
   })
