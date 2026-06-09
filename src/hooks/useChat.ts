@@ -6,6 +6,7 @@ import type {
 import {
   INITIAL_CHAT_STATE,
   abortControllers,
+  chatCacheKey,
   convertAdkSessionToChatState,
   sendChatMessage,
   startChatStream,
@@ -21,7 +22,7 @@ interface UseChatOptions {
  */
 export function useChat({ sessionId }: UseChatOptions) {
   const queryClient = useQueryClient()
-  const queryKey = ['chat', sessionId]
+  const queryKey = chatCacheKey(sessionId)
 
   // Subscribe to the global store via TanStack Query
   const { data = INITIAL_CHAT_STATE, error: queryError } =

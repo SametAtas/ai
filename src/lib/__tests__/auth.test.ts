@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
 
 import { clearUserScopedCache } from '../auth'
+import { chatCacheKey } from '../chatCache'
 
 describe('clearUserScopedCache', () => {
   test('removes me / sessions / chat / feedback caches so an anonymous viewer cannot read prior user data', () => {
@@ -19,8 +20,8 @@ describe('clearUserScopedCache', () => {
       ['sessions'],
       [{ id: 's1', name: 'old', lastUpdateTime: 0 }],
     )
-    queryClient.setQueryData(['chat', 's1'], { messages: ['secret-1'] })
-    queryClient.setQueryData(['chat', 's2'], { messages: ['secret-2'] })
+    queryClient.setQueryData(chatCacheKey('s1'), { messages: ['secret-1'] })
+    queryClient.setQueryData(chatCacheKey('s2'), { messages: ['secret-2'] })
     queryClient.setQueryData(['feedback', 'trace-1', 'user-1'], {
       value: 1,
       comment: 'nice',
@@ -30,8 +31,8 @@ describe('clearUserScopedCache', () => {
 
     expect(queryClient.getQueryData(['me'])).toBeNull()
     expect(queryClient.getQueryData(['sessions'])).toBeUndefined()
-    expect(queryClient.getQueryData(['chat', 's1'])).toBeUndefined()
-    expect(queryClient.getQueryData(['chat', 's2'])).toBeUndefined()
+    expect(queryClient.getQueryData(chatCacheKey('s1'))).toBeUndefined()
+    expect(queryClient.getQueryData(chatCacheKey('s2'))).toBeUndefined()
     expect(
       queryClient.getQueryData(['feedback', 'trace-1', 'user-1']),
     ).toBeUndefined()
