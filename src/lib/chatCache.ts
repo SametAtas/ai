@@ -226,7 +226,7 @@ export function applyEventToState(
   let lastReplyDraftId = prev.lastReplyDraftId
 
   for (const part of event.content.parts) {
-    if (part.functionCall?.id) {
+    if (part.functionCall?.id && event.partial !== true) {
       const { id, name, args } = part.functionCall
       if (id && name) {
         toolInvocations[id] = {
@@ -302,13 +302,17 @@ export function applyEventToState(
     } else if (!event.partial) {
       // Last event still streaming but not this event, mark last event as not streaming.
       // ADK marks the end of streaming by setting `partial: false` with a full message.
-      // However, we have appended the streaming content to the last message in previous iterations,
-      // thus we can just reset the isStreaming flag of the previous message and drop this event.
+      // The streaming content was appended to the last message in previous iterations.
+      // We also append any functionCall parts now: we skipped them during partial events
+      // so that only the canonical adk-<uuid> IDs (from this complete event) are used.
+      const canonicalFCParts = eventParts.filter(p => p.functionCall)
+      const updatedParts = [...(last.parts ?? []), ...canonicalFCParts]
 
       messages = [
         ...messages.slice(0, -1),
         {
           ...last,
+          parts: updatedParts,
           isStreaming: false,
         },
       ]
@@ -318,7 +322,7 @@ export function applyEventToState(
 
       for (const part of eventParts) {
         if (!part.text) {
-          // Tool calls: push as is
+          if (part.functionCall) continue // skip — wait for canonical ID on complete event
           updatedParts.push({ ...part })
           continue
         }
