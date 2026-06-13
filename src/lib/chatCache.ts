@@ -258,6 +258,12 @@ export async function sendChatMessage(
 }
 
 /**
+ * SaveFilesAsArtifactsPlugin inserts a standalone text part whose entire
+ * content is this placeholder — the file is already shown via AttachmentPart.
+ */
+const ARTIFACT_PLACEHOLDER = /^\[Uploaded Artifact: ".*"\]$/
+
+/**
  * Applies a single ADK event to the chat session state.
  * Refactored from processEventIntoCache to be pure and reusable.
  */
@@ -309,8 +315,14 @@ export function applyEventToState(
   const eventParts = event.content.parts.filter((p) => !p.functionResponse)
 
   if (event.content.role === 'user') {
-    // Don't insert user message if it's just function responses
-    if (eventParts.length === 0)
+    // Strip artifact placeholder parts inserted by SaveFilesAsArtifactsPlugin —
+    // the file is already present as a fileData part rendered by AttachmentPart.
+    const userParts = eventParts.filter(
+      (p) => !p.text || !ARTIFACT_PLACEHOLDER.test(p.text.trim()),
+    )
+
+    // Don't insert user message if it's just function responses / placeholders
+    if (userParts.length === 0)
       return { ...prev, toolInvocations, lastReplyDraftId }
 
     // event is user message, just append message
@@ -324,7 +336,7 @@ export function applyEventToState(
           id: genId(),
           role: 'user',
           author: event.author || 'user',
-          parts: [...eventParts],
+          parts: [...userParts],
           timestamp: new Date(),
         },
       ],
