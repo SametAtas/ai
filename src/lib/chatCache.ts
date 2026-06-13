@@ -300,10 +300,10 @@ export function applyEventToState(
           // Partial events carry ephemeral adk-<uuid> IDs; exclude functionCall parts and
           // wait for the canonical IDs from the complete event (handled in else-if branch).
           // Complete events (including history replay) already have canonical IDs — include all.
-          parts: event.partial !== false
+          parts: event.partial === true
             ? eventParts.filter(p => !p.functionCall)
             : eventParts,
-          isStreaming: event.partial !== false,
+          isStreaming: event.partial === true,
           timestamp: new Date(),
           langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
         },
