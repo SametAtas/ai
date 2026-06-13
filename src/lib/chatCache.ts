@@ -304,15 +304,14 @@ export function applyEventToState(
       if (key && toolInvocations[key]) {
         toolInvocations[key] = {
           ...toolInvocations[key],
-          resp: (part.functionResponse.response ??
-            null) as ToolInvocation['resp'],
+          resp: (part.functionResponse.response ?? null) as ToolInvocation['resp'],
         } as ToolInvocation
       }
     }
   }
 
   // Exclude function response parts from chat messages
-  const eventParts = event.content.parts.filter((p) => !p.functionResponse)
+  const eventParts = event.content.parts.filter(p => !p.functionResponse)
 
   if (event.content.role === 'user') {
     // Strip artifact placeholder parts inserted by SaveFilesAsArtifactsPlugin —
@@ -348,8 +347,7 @@ export function applyEventToState(
   // Agent parts (text & tool calls)
   if (event.content.role === 'model') {
     const last = messages[messages.length - 1]
-    const isLastStillStreaming =
-      last?.role === 'model' &&
+    const isLastStillStreaming = last?.role === 'model' &&
       last?.isStreaming &&
       (last?.author || 'writer') === (event.author || 'writer')
 
@@ -369,9 +367,7 @@ export function applyEventToState(
               : eventParts,
           isStreaming: event.partial === true,
           timestamp: new Date(),
-          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as
-            | string
-            | undefined,
+          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
         },
       ]
     } else if (!event.partial) {
@@ -380,7 +376,7 @@ export function applyEventToState(
       // The streaming content was appended to the last message in previous iterations.
       // We also append any functionCall parts now: we skipped them during partial events
       // so that only the canonical adk-<uuid> IDs (from this complete event) are used.
-      const canonicalFCParts = eventParts.filter((p) => p.functionCall)
+      const canonicalFCParts = eventParts.filter(p => p.functionCall)
       const updatedParts = [...(last.parts ?? []), ...canonicalFCParts]
 
       messages = [
@@ -458,11 +454,8 @@ function processEventIntoCache(
   sessionId: string,
   event: AdkEvent,
 ) {
-  queryClient.setQueryData<ChatSessionState>(
-    chatCacheKey(sessionId),
-    (prev) => {
-      if (!prev) return INITIAL_CHAT_STATE
-      return applyEventToState(prev, event)
-    },
-  )
+  queryClient.setQueryData<ChatSessionState>(chatCacheKey(sessionId), (prev) => {
+    if (!prev) return INITIAL_CHAT_STATE
+    return applyEventToState(prev, event)
+  })
 }
