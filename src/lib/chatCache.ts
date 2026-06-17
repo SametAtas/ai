@@ -1,7 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { handleAuthExpired } from './authExpired'
+import { UPLOAD_FILENAME_PREFIX } from './adk'
 import type {
   AdkEvent,
+  AdkPart,
   AdkSession,
   ChatMessage,
   ToolInvocation,
@@ -39,9 +41,39 @@ export interface StartStreamOptions {
   queryClient: QueryClient
   sessionId: string
   payload?: {
-    newMessage?: { role: string; parts: Array<{ text: string }> }
+    newMessage?: { role: string; parts: Array<AdkPart> }
     invocationId?: string
   }
+}
+
+/**
+ * Reads a browser File into an ADK inline-data part (base64).
+ *
+ * Conversion happens here — as late as possible, right before the message is
+ * sent — so the composer only ever holds native File objects, not large base64
+ * strings. The backend's SaveFilesAsArtifactsPlugin turns this inline data into
+ * a gs:// fileData reference in the artifact store.
+ */
+export function fileToInlineDataPart(file: File): Promise<AdkPart> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      // readAsDataURL yields "data:<mime>;base64,<data>" — strip the prefix to
+      // keep just the base64 payload. The browser does the encoding natively
+      // and asynchronously, avoiding a UI-blocking byte-by-byte loop on large
+      // files.
+      const result = reader.result as string
+      resolve({
+        inlineData: {
+          data: result.slice(result.indexOf(',') + 1),
+          mimeType: file.type || 'application/octet-stream',
+          displayName: UPLOAD_FILENAME_PREFIX + file.name,
+        },
+      })
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 /**
@@ -166,16 +198,33 @@ export async function startChatStream({
 /**
  * Sends a message from the user, updating the cache immediately
  * and triggering the background SSE stream.
+ *
+ * Attachments are passed as native File objects and converted to base64
+ * inline-data parts here, just before sending.
  */
-export function sendChatMessage(
+export async function sendChatMessage(
   queryClient: QueryClient,
   sessionId: string,
   text: string,
+  files: Array<File> = [],
 ) {
   const queryKey = chatCacheKey(sessionId)
 
-  if (!queryClient.getQueryData(queryKey)) {
-    queryClient.setQueryData(queryKey, INITIAL_CHAT_STATE)
+  // Set isStreaming:true before any async work so that components mounting
+  // during file reading (e.g. after navigate()) don't see isStreaming:false
+  // and trigger other state changes like markSessionOpened.
+  queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => ({
+    ...(prev ?? INITIAL_CHAT_STATE),
+    isStreaming: true,
+    error: null,
+  }))
+
+  // Build the message parts: text first (when present), then one inline-data
+  // part per attachment.
+  const parts: Array<AdkPart> = []
+  if (text) parts.push({ text })
+  if (files.length > 0) {
+    parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
   }
 
   // Add user message to state
@@ -189,7 +238,7 @@ export function sendChatMessage(
           id: genId(),
           role: 'user',
           author: 'user',
-          parts: [{ text }],
+          parts,
           timestamp: new Date(),
         },
       ],
@@ -203,11 +252,17 @@ export function sendChatMessage(
     payload: {
       newMessage: {
         role: 'user',
-        parts: [{ text }],
+        parts,
       },
     },
   })
 }
+
+/**
+ * SaveFilesAsArtifactsPlugin inserts a standalone text part whose entire
+ * content is this placeholder — the file is already shown via AttachmentPart.
+ */
+const ARTIFACT_PLACEHOLDER = /^\[Uploaded Artifact: ".*"\]$/
 
 /**
  * Applies a single ADK event to the chat session state.
@@ -260,8 +315,15 @@ export function applyEventToState(
   const eventParts = event.content.parts.filter(p => !p.functionResponse)
 
   if (event.content.role === 'user') {
-    // Don't insert user message if it's just function responses
-    if (eventParts.length === 0) return { ...prev, toolInvocations, lastReplyDraftId }
+    // Strip artifact placeholder parts inserted by SaveFilesAsArtifactsPlugin —
+    // the file is already present as a fileData part rendered by AttachmentPart.
+    const userParts = eventParts.filter(
+      (p) => !p.text || !ARTIFACT_PLACEHOLDER.test(p.text.trim()),
+    )
+
+    // Don't insert user message if it's just function responses / placeholders
+    if (userParts.length === 0)
+      return { ...prev, toolInvocations, lastReplyDraftId }
 
     // event is user message, just append message
     return {
@@ -274,7 +336,7 @@ export function applyEventToState(
           id: genId(),
           role: 'user',
           author: event.author || 'user',
-          parts: [...eventParts],
+          parts: [...userParts],
           timestamp: new Date(),
         },
       ],
@@ -300,9 +362,10 @@ export function applyEventToState(
           // Partial events carry ephemeral adk-<uuid> IDs; exclude functionCall parts and
           // wait for the canonical IDs from the complete event (handled in else-if branch).
           // Complete events (including history replay) already have canonical IDs — include all.
-          parts: event.partial === true
-            ? eventParts.filter(p => !p.functionCall)
-            : eventParts,
+          parts:
+            event.partial === true
+              ? eventParts.filter((p) => !p.functionCall)
+              : eventParts,
           isStreaming: event.partial === true,
           timestamp: new Date(),
           langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
