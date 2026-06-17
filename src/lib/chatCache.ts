@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { handleAuthExpired } from './authExpired'
+import { UPLOAD_FILENAME_PREFIX } from './adk'
 import type {
   AdkEvent,
   AdkPart,
@@ -66,7 +67,7 @@ export function fileToInlineDataPart(file: File): Promise<AdkPart> {
         inlineData: {
           data: result.slice(result.indexOf(',') + 1),
           mimeType: file.type || 'application/octet-stream',
-          displayName: file.name,
+          displayName: UPLOAD_FILENAME_PREFIX + file.name,
         },
       })
     }

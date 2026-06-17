@@ -18,6 +18,27 @@ export type AdkEvent = components['schemas']['Event-Output']
 export type AdkSession = components['schemas']['Session']
 export type AdkRunPayload = components['schemas']['RunAgentRequest']
 
+// ── Attachment artifact naming ─────────────────────────────────────
+
+/**
+ * Prefix added to uploaded-file `displayName`s before they are sent as inline
+ * data. The backend's SaveFilesAsArtifactsPlugin stores each artifact under its
+ * `display_name`, so this namespaces user uploads in the artifact store and
+ * keeps user-controlled filenames from clashing with system-generated
+ * artifacts (e.g. the `search-widget-*` snippets). Strip it with
+ * `stripUploadPrefix` before showing the filename to the user.
+ *
+ * Note: this is unrelated to ADK's `user:` namespace (cross-session artifacts);
+ * `user-upload-` does not start with `user:`, so it stays session-scoped.
+ */
+export const UPLOAD_FILENAME_PREFIX = 'user-upload-'
+
+/** Removes `UPLOAD_FILENAME_PREFIX` from an artifact name for display. */
+export const stripUploadPrefix = (name: string): string =>
+  name.startsWith(UPLOAD_FILENAME_PREFIX)
+    ? name.slice(UPLOAD_FILENAME_PREFIX.length)
+    : name
+
 // ── Chat message types for UI ──────────────────────────────────────
 
 export type MessageRole = 'user' | 'model'

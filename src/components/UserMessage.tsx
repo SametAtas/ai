@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AdkPart, ChatMessage } from '@/lib/adk'
+import { stripUploadPrefix } from '@/lib/adk'
 
 interface UserMessageProps {
   message: ChatMessage
@@ -25,7 +26,7 @@ function FileChip({ name, mimeType }: { name: string; mimeType?: string | null }
 function AttachmentPart({ part }: { part: AdkPart }) {
   const inline = part.inlineData
   if (inline?.data) {
-    const name = inline.displayName ?? '附件'
+    const name = inline.displayName ? stripUploadPrefix(inline.displayName) : '附件'
     if (inline.mimeType?.startsWith('image/')) {
       return (
         <img
@@ -44,7 +45,11 @@ function AttachmentPart({ part }: { part: AdkPart }) {
   if (file?.fileUri) {
     return (
       <FileChip
-        name={file.displayName ?? file.fileUri.split('/').pop() ?? '附件'}
+        name={
+          file.displayName
+            ? stripUploadPrefix(file.displayName)
+            : (file.fileUri.split('/').pop() ?? '附件')
+        }
         mimeType={file.mimeType}
       />
     )
