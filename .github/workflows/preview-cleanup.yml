@@ -8,7 +8,6 @@ permissions:
   contents: read
   id-token: write
   deployments: write
-  administration: write
 
 jobs:
   cleanup:
@@ -31,15 +30,31 @@ jobs:
             --region asia-east1 \
             --remove-tags="pr-${{ github.event.number }}" || echo "Tag not found or service does not exist, skipping."
 
-      - name: Delete GitHub Environment
+      - name: Deactivate and Delete GitHub Deployments
         uses: actions/github-script@v7
         with:
           script: |
             const environment_name = `pr-${context.issue.number}`;
             const { owner, repo } = context.repo;
 
-            await github.rest.repos.deleteAnEnvironment({
+            const { data: deployments } = await github.rest.repos.listDeployments({
               owner,
               repo,
-              environment_name,
+              environment: environment_name,
+              per_page: 100,
             });
+
+            for (const deployment of deployments) {
+              await github.rest.repos.createDeploymentStatus({
+                owner,
+                repo,
+                deployment_id: deployment.id,
+                state: 'inactive',
+              });
+              await github.rest.repos.deleteDeployment({
+                owner,
+                repo,
+                deployment_id: deployment.id,
+              });
+            }
+            console.log(`Deleted ${deployments.length} deployment(s) for environment ${environment_name}`);
