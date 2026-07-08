@@ -586,8 +586,18 @@ async def after_tool(
                         ),
                     )
                 return parsed
+        if tool_response is None or (isinstance(tool_response, str) and not tool_response.strip()):
+            return {
+                "error": "timeout",
+                "message": "[SYSTEM] Investigator returned empty. Possibly timeout. Retry with simpler/fewer queries.",
+            }
         return tool_response
 
+    if tool_response is None or (isinstance(tool_response, str) and not tool_response.strip()):
+        return {
+            "error": "timeout",
+            "message": "[SYSTEM] Verifier returned empty. Possibly timeout. Retry with fewer URLs or claims.",
+        }
     if not isinstance(tool_response, str):
         return None
     try:
