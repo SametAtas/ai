@@ -1,6 +1,7 @@
+import json
 import logging
 import os
-from typing import cast
+from typing import Optional, cast
 
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.plugins.base_plugin import BasePlugin
@@ -20,6 +21,15 @@ _SESSION_ID_ATTR = SpanAttributes.SESSION_ID
 _LANGFUSE_SESSION_ID_ATTR = "langfuse.session.id"
 # Key used in event.custom_metadata to link events back to their Langfuse trace
 _LANGFUSE_TRACE_ID_KEY = "langfuse_trace_id"
+
+# openinference semconv: "input.value" / "output.value" and their mime types.
+# Langfuse shows the root span's input/output as the trace's input/output in
+# session view.
+_INPUT_VALUE_ATTR = SpanAttributes.INPUT_VALUE
+_INPUT_MIME_ATTR = SpanAttributes.INPUT_MIME_TYPE
+_OUTPUT_VALUE_ATTR = SpanAttributes.OUTPUT_VALUE
+_OUTPUT_MIME_ATTR = SpanAttributes.OUTPUT_MIME_TYPE
+_TEXT_MIME_TYPE = "text/plain"
 
 
 class RootSessionSpanProcessor(SpanProcessor):
@@ -52,6 +62,76 @@ class RootSessionSpanProcessor(SpanProcessor):
             span.set_attribute(_LANGFUSE_SESSION_ID_ATTR, session)
 
 
+def _parts_text(data: dict) -> Optional[str]:
+    """
+    Extracts joined text from an ADK message dict ({new_message|content}.parts).
+
+    Returns None when the dict has no recognizable parts or no text parts, so
+    callers keep the original attribute (e.g. tool-call payloads, image-only
+    messages). Thought parts are skipped: the writer runs with
+    include_thoughts=True, and thoughts are internal reasoning, not the
+    reply text.
+    """
+    content = data.get("new_message") or data.get("content")
+    if not isinstance(content, dict):
+        return None
+    parts = content.get("parts")
+    if not isinstance(parts, list):
+        return None
+    texts = [
+        text
+        for part in parts
+        if isinstance(part, dict)
+        and not part.get("thought")
+        and isinstance(text := part.get("text"), str)
+        and text
+    ]
+    if not texts:
+        return None
+    return "\n".join(texts)
+
+
+class TextExtractionSpanProcessor(SpanProcessor):
+    """
+    Rewrites input.value/output.value from serialized JSON to plain text so
+    traces are browsable in Langfuse's session view (#14).
+
+    GoogleADKInstrumentor stamps input.value with the serialized run_async
+    arguments and output.value with the final Event JSON; Langfuse then shows
+    raw JSON as the trace input/output. At on_end we parse those payloads and
+    replace them with the joined text of new_message.parts/content.parts.
+
+    on_end receives a ReadableSpan snapshot (no set_attribute), so we update
+    the underlying attribute mapping directly. Only existing keys are ever
+    replaced, never inserted or removed, and payloads without extractable
+    text are left untouched.
+    """
+
+    def on_end(self, span) -> None:
+        attributes = getattr(span, "_attributes", None)
+        if not attributes:
+            return
+        for value_attr, mime_attr in (
+            (_INPUT_VALUE_ATTR, _INPUT_MIME_ATTR),
+            (_OUTPUT_VALUE_ATTR, _OUTPUT_MIME_ATTR),
+        ):
+            raw = attributes.get(value_attr)
+            if not isinstance(raw, str):
+                continue
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(data, dict):
+                continue
+            text = _parts_text(data)
+            if text is None:
+                continue
+            attributes[value_attr] = text
+            if mime_attr in attributes:
+                attributes[mime_attr] = _TEXT_MIME_TYPE
+
+
 def setup_instrumentation():
     """
     Sets up Langfuse instrumentation for Google ADK.
@@ -64,9 +144,9 @@ def setup_instrumentation():
 
     if langfuse.auth_check():
         GoogleADKInstrumentor().instrument()
-        cast(SDKTracerProvider, otel_trace.get_tracer_provider()).add_span_processor(
-            RootSessionSpanProcessor()
-        )
+        provider = cast(SDKTracerProvider, otel_trace.get_tracer_provider())
+        provider.add_span_processor(RootSessionSpanProcessor())
+        provider.add_span_processor(TextExtractionSpanProcessor())
         logger.info("Langfuse instrumentation initialized.")
     else:
         logger.warning("Langfuse authentication failed. Skipping instrumentation.")
