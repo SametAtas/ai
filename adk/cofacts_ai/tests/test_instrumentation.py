@@ -10,15 +10,20 @@ point -- a set_attribute-based implementation raises AttributeError there.
 import json
 from collections.abc import Mapping
 from types import MappingProxyType, SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
-    InMemorySpanExporter,
+from opentelemetry.sdk.trace.export import (
+    SimpleSpanProcessor,
+    SpanExporter,
+    SpanExportResult,
 )
 
-from cofacts_ai.instrumentation import TextExtractionSpanProcessor, _parts_text
+from cofacts_ai.instrumentation import (
+    TextExtractionSpanProcessor,
+    _move_processor_first,
+    _parts_text,
+)
 
 JSON_MIME = "application/json"
 
@@ -41,18 +46,43 @@ FINAL_EVENT_OUTPUT = json.dumps(
 )
 
 
-def run_span(attributes: dict) -> Mapping[str, Any]:
-    """Ends one span carrying `attributes`; returns the EXPORTED attributes."""
+class SnapshotExporter(SpanExporter):
+    """Copies attributes at export() time, like OTLP serialization does.
+
+    InMemorySpanExporter holds the span by reference, so a mutation AFTER
+    export would still be visible when a test reads the attributes back. The
+    snapshot makes every test genuinely sensitive to processor order.
+    """
+
+    def __init__(self) -> None:
+        self.snapshots: list[dict] = []
+
+    def export(self, spans) -> SpanExportResult:
+        self.snapshots.extend(dict(span.attributes or {}) for span in spans)
+        return SpanExportResult.SUCCESS
+
+
+def run_span(attributes: dict, reorder: bool = True) -> Mapping[str, Any]:
+    """Ends one span carrying `attributes`; returns attributes as exported.
+
+    Replicates production registration order: the exporting processor is
+    registered first (Langfuse's is added inside get_client(), before ours),
+    then the rewrite processor, then _move_processor_first. SimpleSpanProcessor
+    exports synchronously at on_end, so with reorder=False the export
+    deterministically happens before the rewrite.
+    """
     provider = TracerProvider()
-    exporter = InMemorySpanExporter()
-    provider.add_span_processor(TextExtractionSpanProcessor())
+    exporter = SnapshotExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
+    processor = TextExtractionSpanProcessor()
+    provider.add_span_processor(processor)
+    if reorder:
+        _move_processor_first(provider, processor)
     tracer = provider.get_tracer("test")
     with tracer.start_as_current_span("span", attributes=attributes):
         pass
-    (span,) = exporter.get_finished_spans()
-    assert span.attributes is not None
-    return span.attributes
+    (snapshot,) = exporter.snapshots
+    return snapshot
 
 
 class TestTextExtractionSpanProcessor:
@@ -95,6 +125,30 @@ class TestTextExtractionSpanProcessor:
         )
         TextExtractionSpanProcessor().on_end(span)
         assert span._attributes["input.value"] == INVOCATION_INPUT
+
+
+class TestMoveProcessorFirst:
+    def test_without_reorder_export_wins_the_race(self):
+        # Documents why the reorder exists: with the production registration
+        # order and a synchronous exporter, export runs before the rewrite.
+        attrs = run_span(
+            {"input.value": INVOCATION_INPUT, "input.mime_type": JSON_MIME},
+            reorder=False,
+        )
+        assert attrs["input.value"] == INVOCATION_INPUT
+
+    def test_reorder_makes_rewrite_run_before_export(self):
+        attrs = run_span(
+            {"input.value": INVOCATION_INPUT, "input.mime_type": JSON_MIME},
+            reorder=True,
+        )
+        assert attrs["input.value"] == "請查證這則訊息"
+
+    def test_unexpected_provider_internals_do_not_raise(self):
+        # If the SDK renames its private fields, the reorder logs and degrades
+        # to the unreordered behavior instead of failing setup.
+        fake_provider = cast(TracerProvider, SimpleNamespace())
+        _move_processor_first(fake_provider, TextExtractionSpanProcessor())
 
 
 class TestPartsText:

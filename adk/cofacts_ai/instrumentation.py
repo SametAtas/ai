@@ -138,6 +138,32 @@ class TextExtractionSpanProcessor(SpanProcessor):
             logger.exception("Failed to rewrite span input/output text")
 
 
+def _move_processor_first(provider: SDKTracerProvider, processor: SpanProcessor):
+    """
+    Moves `processor` ahead of previously registered span processors.
+
+    Langfuse's BatchSpanProcessor is registered inside get_client(), before we
+    can add ours, and processors run in registration order. Its on_end enqueues
+    the span for asynchronous export, so the rewrite must run first or a batch
+    flush can race it and export the raw JSON. The multi-processor has no
+    public ordering API; on any surprise we leave the order unchanged, which
+    degrades to that occasional race, not to an error.
+    """
+    multi = getattr(provider, "_active_span_processor", None)
+    processors = getattr(multi, "_span_processors", None)
+    if (
+        multi is None
+        or not isinstance(processors, tuple)
+        or processor not in processors
+    ):
+        logger.warning("Could not reorder span processors; rewrite runs last.")
+        return
+    multi._span_processors = (
+        processor,
+        *(p for p in processors if p is not processor),
+    )
+
+
 def setup_instrumentation():
     """
     Sets up Langfuse instrumentation for Google ADK.
@@ -152,7 +178,9 @@ def setup_instrumentation():
         GoogleADKInstrumentor().instrument()
         provider = cast(SDKTracerProvider, otel_trace.get_tracer_provider())
         provider.add_span_processor(RootSessionSpanProcessor())
-        provider.add_span_processor(TextExtractionSpanProcessor())
+        text_extraction = TextExtractionSpanProcessor()
+        provider.add_span_processor(text_extraction)
+        _move_processor_first(provider, text_extraction)
         logger.info("Langfuse instrumentation initialized.")
     else:
         logger.warning("Langfuse authentication failed. Skipping instrumentation.")
