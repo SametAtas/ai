@@ -9,6 +9,7 @@ point -- a set_attribute-based implementation raises AttributeError there.
 
 import json
 from collections.abc import Mapping
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
 from opentelemetry.sdk.trace import TracerProvider
@@ -83,6 +84,17 @@ class TestTextExtractionSpanProcessor:
     def test_span_without_input_output_is_ignored(self):
         attrs = run_span({"session.id": "s1"})
         assert attrs["session.id"] == "s1"
+
+    def test_mutation_failure_does_not_raise(self):
+        # A future SDK could hand on_end a read-only mapping; the rewrite must
+        # log and swallow the failure, never break span end.
+        span = SimpleNamespace(
+            _attributes=MappingProxyType(
+                {"input.value": INVOCATION_INPUT, "input.mime_type": JSON_MIME}
+            )
+        )
+        TextExtractionSpanProcessor().on_end(span)
+        assert span._attributes["input.value"] == INVOCATION_INPUT
 
 
 class TestPartsText:

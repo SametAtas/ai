@@ -108,28 +108,34 @@ class TextExtractionSpanProcessor(SpanProcessor):
     """
 
     def on_end(self, span) -> None:
-        attributes = getattr(span, "_attributes", None)
-        if not attributes:
-            return
-        for value_attr, mime_attr in (
-            (_INPUT_VALUE_ATTR, _INPUT_MIME_ATTR),
-            (_OUTPUT_VALUE_ATTR, _OUTPUT_MIME_ATTR),
-        ):
-            raw = attributes.get(value_attr)
-            if not isinstance(raw, str):
-                continue
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(data, dict):
-                continue
-            text = _parts_text(data)
-            if text is None:
-                continue
-            attributes[value_attr] = text
-            if mime_attr in attributes:
-                attributes[mime_attr] = _TEXT_MIME_TYPE
+        # Never let a rewrite failure break span end: the mapping is private
+        # SDK API, and OTel does not catch processor exceptions. A raise here
+        # would fail every span in the application.
+        try:
+            attributes = getattr(span, "_attributes", None)
+            if not attributes:
+                return
+            for value_attr, mime_attr in (
+                (_INPUT_VALUE_ATTR, _INPUT_MIME_ATTR),
+                (_OUTPUT_VALUE_ATTR, _OUTPUT_MIME_ATTR),
+            ):
+                raw = attributes.get(value_attr)
+                if not isinstance(raw, str):
+                    continue
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                text = _parts_text(data)
+                if text is None:
+                    continue
+                attributes[value_attr] = text
+                if mime_attr in attributes:
+                    attributes[mime_attr] = _TEXT_MIME_TYPE
+        except Exception:
+            logger.exception("Failed to rewrite span input/output text")
 
 
 def setup_instrumentation():
